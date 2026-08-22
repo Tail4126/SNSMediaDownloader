@@ -1,6 +1,6 @@
 {
     "extName": { "message": "SNS Media Downloader" },
-    "extDesc": { "message": "X(트위터)와 Bluesky의 개별 게시물에서 이미지와 동영상을 바로 다운로드합니다(공식 API 미사용, ZIP 없음)" },
+    "extDesc": { "message": "X(트위터)와 Bluesky의 개별 게시물에서 이미지와 동영상을 바로 다운로드합니다" },
     "actionTitle": { "message": "파일명 설정" },
     "labelFile": { "message": "파일명" },
     "placeholderList": { "message": "자리표시자 목록" },

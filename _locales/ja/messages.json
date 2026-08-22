@@ -1,6 +1,6 @@
 {
     "extName": { "message": "SNS Media Downloader" },
-    "extDesc": { "message": "X(Twitter)と Bluesky の個々の投稿から画像・動画を直接ダウンロードします（公式API不使用・ZIP化なし）" },
+    "extDesc": { "message": "X(Twitter)と Bluesky の個々の投稿から画像・動画を直接ダウンロードします" },
     "actionTitle": { "message": "ファイル名設定" },
     "labelFile": { "message": "ファイル名" },
     "placeholderList": { "message": "プレースホルダ一覧" },
