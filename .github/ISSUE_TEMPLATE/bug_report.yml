@@ -1,0 +1,180 @@
+name: Bug report / 不具合報告
+description: Something isn't working as expected / 動作がおかしいときはこちら
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report. 報告ありがとうございます。
+
+        ⚠️ **Do not report security vulnerabilities here.** Use private reporting — see [SECURITY.md](../blob/main/SECURITY.md).
+        ⚠️ **セキュリティ上の問題はここに書かないでください。** 非公開報告をご利用ください。
+
+        日本語・英語のどちらでも構いません。
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you start / 事前確認
+      options:
+        - label: I searched the existing issues and this hasn't been reported yet. / 既存の Issue を検索し、同じ報告がないことを確認した
+          required: true
+        - label: I reloaded the page and tried again. / ページを再読み込みしてから、もう一度試した
+          required: true
+        - label: The media is in the post itself — not a quote post, a link-card preview, or an external GIF embed. / 対象は投稿そのもののメディアである（引用投稿・リンクカード・外部 GIF 埋め込みではない）
+          required: true
+        - label: I reproduced it with my other extensions disabled. / 他の拡張機能を無効にしても再現した
+          required: false
+
+  - type: dropdown
+    id: site
+    attributes:
+      label: Site / サイト
+      options:
+        - X (Twitter)
+        - Bluesky
+        - Both / 両方
+        - Not site-specific — settings screen, etc. / サイトに依存しない（設定画面など）
+    validations:
+      required: true
+
+  - type: dropdown
+    id: page-state
+    attributes:
+      label: Where in the site / どの画面か
+      description: Where the problem post was shown. / 問題の投稿が表示されていた場所。
+      options:
+        - Timeline / タイムライン
+        - Thread or post detail page / スレッド・投稿詳細ページ
+        - Profile page / プロフィールページ
+        - Search results / 検索結果
+        - Other / その他
+    validations:
+      required: true
+
+  - type: dropdown
+    id: media
+    attributes:
+      label: Media type / メディアの種類
+      options:
+        - Single image / 画像 1 枚
+        - Multiple images / 画像 複数枚
+        - Video / 動画
+        - GIF
+        - Mixed or unsure / 混在・不明
+    validations:
+      required: true
+
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser / ブラウザ
+      options:
+        - Chrome
+        - Edge
+        - Brave
+        - Other Chromium-based / その他 Chromium 系
+        - Firefox
+        - Firefox Developer Edition / Nightly
+    validations:
+      required: true
+
+  - type: input
+    id: browser-version
+    attributes:
+      label: Browser version / ブラウザのバージョン
+      placeholder: "e.g. 134.0.6998.89"
+    validations:
+      required: true
+
+  - type: input
+    id: extension-version
+    attributes:
+      label: Extension version / 拡張機能のバージョン
+      description: Shown in the top-right of the settings screen, or the `version` field in `manifest.json`. / 設定画面の右上に表示される値、または `manifest.json` の `version`。
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: "e.g. Windows 11 / macOS 15.3 / Ubuntu 24.04"
+    validations:
+      required: false
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened / 起きたこと
+      description: Describe the actual behaviour. If a toast appeared, quote it exactly. / 実際の動作を書いてください。トーストが出た場合は、その文言をそのまま書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead / 期待した動作
+    validations:
+      required: false
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / 再現手順
+      description: If it only happens on a particular kind of post, that's useful — please say so. / 特定の種類の投稿でのみ起きる場合は、その情報も有用です。
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: input
+    id: post-url
+    attributes:
+      label: A public post that reproduces it / 再現する公開投稿の URL
+      description: Optional, but by far the most useful thing you can include. Public posts only, please. / 任意ですが、これがあると圧倒的に調査が早くなります。公開投稿のみでお願いします。
+      placeholder: "https://bsky.app/profile/.../post/..."
+    validations:
+      required: false
+
+  - type: input
+    id: template
+    attributes:
+      label: Filename template / ファイル名テンプレート
+      description: Paste the contents of the Filename field, even if you didn't change it. Essential for anything about filenames. / 「ファイル名」欄の内容をそのまま貼ってください。変更していない場合もそのままで結構です。ファイル名に関する報告では必須級の情報です。
+      placeholder: "{site}/{user}-{id}-{datetime}-{kind}{n}.{ext}"
+    validations:
+      required: false
+
+  - type: textarea
+    id: settings
+    attributes:
+      label: Other settings changed from the defaults / 既定値から変更したその他の設定
+      description: Only the ones you changed. "None" is a perfectly good answer. / 変更したものだけで結構です。「なし」でも構いません。
+      placeholder: "e.g. If a file exists: Overwrite"
+    validations:
+      required: false
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console output / コンソールの出力
+      description: |
+        Open the **page** console (F12 on x.com or bsky.app), reproduce the problem, and paste any errors. If the problem is about downloads not starting, also check the service worker console from the extensions page.
+
+        x.com / bsky.app のページ側で F12 を押してコンソールを開き、症状を再現させてからエラーを貼り付けてください。ダウンロードが始まらない症状の場合は、拡張機能ページから開けるサービスワーカーのコンソールも確認してください。
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else / その他
+      description: Screenshots or screen recordings. / スクリーンショットや画面録画など。
+    validations:
+      required: false

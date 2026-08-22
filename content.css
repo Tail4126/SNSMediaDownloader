@@ -1,0 +1,239 @@
+/* SPDX-License-Identifier: Apache-2.0 OR MIT */
+
+/*
+ * content.css
+ * ==================================================================
+ * X と Bluesky のページに直接差し込まれるスタイル。
+ * ダウンロードボタンと通知（トースト）の見た目を定義します。
+ *
+ * ここが popup.css と決定的に違うのは「他人の家に間借りしている」点です。
+ * サイト側の CSS と共存しなければならないため、次の 2 つを守っています。
+ *
+ *   1. クラス名を必ず smd- で始める
+ *      サイト側に .button などがあっても衝突しません。
+ *   2. 要素名やサイト側のクラスを対象にしない
+ *      うっかりサイトの見た目を壊さないようにするためです。
+ * ==================================================================
+ */
+
+:root
+{
+    /*
+     * 色を「rgb(...)」の形ではなく、数値 3 つのカンマ区切りで持たせています。
+     * 一見すると回りくどいですが、こうしておくと 1 つの変数から
+     *   rgb(var(--smd-accent))         → 不透明な色
+     *   rgba(var(--smd-accent), 0.1)   → 10% の半透明
+     * の両方を作れます。色ごとに変数を 2 つ用意する必要がなくなります。
+     */
+    --smd-accent: 29, 155, 240;  /* X のブランドカラー（既定値） */
+
+    /* こちらは半透明にして使わないので、そのまま rgb() で書いています */
+    --smd-idle: rgb(113, 118, 123); /* 押していないときのアイコン色 */
+}
+
+/*
+ * サイトごとの色の切り替え。
+ * shared/core.js の start() が実行時に
+ *   document.documentElement.dataset.smdSite = "bluesky"
+ * を実行し、<html data-smd-site="bluesky"> という属性を付けます。
+ *
+ * すると変数の値がここで上書きされ、以下のボタンやトーストの色が
+ * まとめて Bluesky 用に変わります。個別のルールを書き直す必要はありません。
+ */
+[data-smd-site = "bluesky"]
+{
+    --smd-accent: 16, 131, 254;
+    --smd-idle: rgb(111, 134, 159);
+}
+
+/* ------------------------------------------------------------------
+ * メインボタン（返信・いいねの並びに追加されるもの）
+ * ------------------------------------------------------------------ */
+.smd-button
+{
+    display: inline-flex;   /* アイコンと枚数バッジを横並びにする */
+    align-items: center;
+    gap: 3px;
+    margin-left: 4px;       /* 隣のボタンとの間隔 */
+    padding: 6px;           /* 押しやすいよう、見た目より広めの当たり判定を作る */
+
+    /*
+     * border: 0 と background: transparent は、
+     * ブラウザ標準のボタン装飾を消すための指定です。
+     * サイト側の CSS がボタンに枠線を付けている場合にも効きます。
+     */
+    border: 0;
+    border-radius: 9999px;
+    background: transparent;
+
+    /*
+     * SVG アイコン側で fill="currentColor" と書いてあるため、
+     * ここで color を指定するだけでアイコンの色が変わります。
+     */
+    color: var(--smd-idle);
+
+    line-height: 1; /* 余分な行の高さを消して、アイコンを正確に中央へ置く */
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.smd-button:hover
+{
+    /* X や Bluesky の他のボタンと同じ「丸く色が付く」挙動に合わせています */
+    color: rgb(var(--smd-accent));
+    background: rgba(var(--smd-accent), 0.1);
+}
+
+/* メディアが複数あるときにアイコンの右へ出る枚数バッジ */
+.smd-count
+{
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* ------------------------------------------------------------------
+ * 個別ボタン（サムネイルの右上に重なるもの）
+ * ------------------------------------------------------------------ */
+.smd-item-button
+{
+    /*
+     * position: absolute は「一番近い、position が static でない祖先」を
+     * 基準に配置されます。その基準を確保するため、core.js の inject() が
+     * 必要に応じて親へ position: relative を付けています。
+     */
+    position: absolute;
+    top: 8px;
+    right: 8px;
+
+    /* サムネイル画像より前面に出すための重なり順 */
+    z-index: 2;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center; /* 縦横ともに中央そろえ */
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: 9999px;
+
+    /*
+     * 写真の上に置くため、背景は黒の半透明にします。
+     * 明るい写真でも暗い写真でも白いアイコンが読めるようにするためです。
+     */
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    cursor: pointer;
+
+    /* 普段は隠しておき、マウスが乗ったときだけ現れます（下のルール参照） */
+    opacity: 0;
+    transition: opacity 0.15s, background-color 0.15s;
+}
+
+/*
+ * 表示条件が 2 つあります。
+ *
+ *   *:hover > .smd-item-button
+ *     「直接の親にマウスが乗っているとき」。* はどんな要素でもよいという意味で、
+ *     親のタグ名がサイトによって違うため、あえて限定していません。
+ *
+ *   .smd-item-button:focus-visible
+ *     キーボードの Tab で移動してきたとき。マウスを使わない人でも
+ *     ボタンの存在と位置が分かるようにするための配慮です。
+ */
+*:hover > .smd-item-button,
+.smd-item-button:focus-visible
+{
+    opacity: 1;
+}
+
+.smd-item-button:hover
+{
+    background: rgba(var(--smd-accent), 0.9);
+}
+
+/* ------------------------------------------------------------------
+ * 処理中の状態
+ * core.js がクリック時にこのクラスを付け、完了後に外します。
+ * ------------------------------------------------------------------ */
+.smd-busy
+{
+    opacity: 0.45; /* 薄くして「作業中」と伝える */
+
+    /*
+     * pointer-events: none にすると、クリックもホバーも一切受け付けなくなります。
+     * 保存中に連打されて同じファイルを何度もダウンロードするのを防ぎます。
+     */
+    pointer-events: none;
+}
+
+/* ------------------------------------------------------------------
+ * トースト（画面下部に出る通知）
+ * ------------------------------------------------------------------ */
+.smd-toast
+{
+    /* fixed はスクロールしても画面上の同じ位置に留まります */
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+
+    /*
+     * 32 ビット符号付き整数の最大値です。
+     * SNS のモーダルやヘッダーは大きな z-index を使うことが多いため、
+     * 「これ以上は存在しない」値を指定して確実に最前面へ出しています。
+     */
+    z-index: 2147483647;
+
+    /* vw は画面幅に対する割合。80vw ＝ 画面幅の 80% が上限 */
+    max-width: 80vw;
+
+    padding: 10px 18px;
+    border-radius: 9999px;
+    background: rgb(var(--smd-accent));
+    color: #fff;
+
+    /*
+     * サイト側のフォント設定を引き継がず、自前で指定します。
+     * 継承すると SNS 側の変更で見た目が崩れる可能性があるためです。
+     */
+    font-family: system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+
+    opacity: 0;
+
+    /*
+     * 非表示のときに背後のリンクなどをクリックできるようにします。
+     * これが無いと、消えた後も透明な帯が操作を邪魔してしまいます。
+     */
+    pointer-events: none;
+
+    /*
+     * translateX(-50%) は横方向の中央そろえの定番です。
+     * left: 50% で「要素の左端」を画面中央に置き、
+     * そこから自分の幅の半分だけ左へ戻すことで、正確に中央へ来ます。
+     * translateY(12px) は初期状態で少し下にずらしておく分で、
+     * 表示時に 0 へ戻ることで「下からふわっと出る」動きになります。
+     */
+    transform: translateX(-50%) translateY(12px);
+    transition: opacity 0.2s, transform 0.2s;
+}
+
+/* core.js がこのクラスを付け外しして表示・非表示を切り替えます */
+.smd-toast-show
+{
+    opacity: 1;
+
+    /*
+     * translateX(-50%) をここでも書き直しているのは、transform が
+     * 「上書き」されるプロパティだからです。translateY だけ書くと
+     * 中央そろえが解除され、トーストが右にずれてしまいます。
+     */
+    transform: translateX(-50%) translateY(0);
+}
+
+/* エラー時だけ赤くします（サイトを問わず同じ赤なので変数化していません） */
+.smd-toast-error
+{
+    background: rgb(244, 33, 46);
+}

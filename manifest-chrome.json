@@ -1,0 +1,88 @@
+{
+    "manifest_version": 3,
+
+    "name": "__MSG_extName__",
+    "short_name": "__MSG_extName__",
+    "version": "1.0.0",
+    "description": "__MSG_extDesc__",
+
+    "default_locale": "en",
+
+    "minimum_chrome_version": "123",
+
+    "icons": {
+        "16": "icons/16.png",
+        "48": "icons/48.png",
+        "128": "icons/128.png"
+    },
+
+    "host_permissions": [
+        "https://x.com/*",
+        "https://twitter.com/*",
+        "https://bsky.app/*",
+        "https://public.api.bsky.app/*",
+        "https://plc.directory/*"
+    ],
+
+    "content_scripts": [
+        {
+            "matches": [
+                "https://x.com/*",
+                "https://twitter.com/*"
+            ],
+            "js": [
+                "sites/x/interceptor.js"
+            ],
+            "run_at": "document_start",
+            "world": "MAIN"
+        },
+        {
+            "matches": [
+                "https://x.com/*",
+                "https://twitter.com/*"
+            ],
+            "js": [
+                "shared/template.js",
+                "shared/core.js",
+                "sites/x/content.js"
+            ],
+            "css": [
+                "content.css"
+            ],
+            "run_at": "document_start"
+        },
+        {
+            "matches": [
+                "https://bsky.app/*"
+            ],
+            "js": [
+                "shared/template.js",
+                "shared/core.js",
+                "sites/bluesky/content.js"
+            ],
+            "css": [
+                "content.css"
+            ],
+            "run_at": "document_start"
+        }
+    ],
+
+    "background": {
+        "service_worker": "background.js"
+    },
+
+    "action": {
+        "default_title": "__MSG_actionTitle__",
+        "default_popup": "popup.html"
+    },
+
+    "options_ui": {
+        "page": "popup.html",
+        "open_in_tab": true
+    },
+
+    "permissions": [
+        "downloads",
+        "storage"
+    ]
+}

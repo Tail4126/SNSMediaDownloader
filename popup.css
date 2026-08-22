@@ -1,0 +1,543 @@
+/* SPDX-License-Identifier: Apache-2.0 OR MIT */
+
+/*
+ * popup.css
+ * ==================================================================
+ * 設定画面（popup.html）専用のスタイル。
+ *
+ * ポイントは 2 つ:
+ *   1. 色をすべて CSS 変数にまとめ、ライト / ダークを一括で切り替えている
+ *   2. トグルスイッチを画像なしで CSS だけで描いている
+ * ==================================================================
+ */
+
+/* ------------------------------------------------------------------
+ * 配色とサイズの定義
+ * :root は <html> 要素を指す擬似クラスです。ここで宣言した CSS 変数は
+ * ページ全体のどこからでも var(...) で参照できます。
+ * ------------------------------------------------------------------ */
+:root
+{
+    /*
+     * ブラウザに「この画面はライトもダークも対応している」と伝えます。
+     * これを書くと、スクロールバーや標準フォーム部品の見た目も
+     * OS のテーマに合わせて自動で切り替わります。
+     */
+    color-scheme: light dark;
+
+    /*
+     * light-dark(A, B) は「ライトテーマなら A、ダークテーマなら B」を選ぶ関数です。
+     * 従来は @media (prefers-color-scheme: dark) のブロックを別に書いて
+     * 全部の色を定義し直す必要がありましたが、この関数なら 1 行で済みます。
+     * ※ 比較的新しい機能なので、古いブラウザでは効きません
+     */
+    --bg: light-dark(#f9f9f9, #0f0f0f);                  /* 画面全体の背景 */
+    --surface: light-dark(#ffffff, #212121);             /* カード（.group）の背景 */
+    --surface-hover: light-dark(#f2f2f2, #313131);       /* カード上のボタンにマウスを乗せたとき */
+    --line: light-dark(#e3e3e3, #303030);                /* 枠線・区切り線 */
+    --fg: light-dark(#0f1419, #e7e9ea);                  /* 本文の文字色 */
+    --muted: light-dark(#536471, #8b98a5);               /* 補足説明などの薄い文字色 */
+
+    --accent: #1d9bf0;                                   /* 強調色。明暗どちらでも読めるので共通 */
+    --off: light-dark(#d4d4d4, #4d4d4d);                 /* スイッチ OFF 時の背景 */
+    --knob: #ffffff;                                     /* スイッチのつまみ */
+
+    /*
+     * 末尾 2 桁は不透明度です。#00000008 は「黒の透明度 8/255」で、
+     * rgba(0, 0, 0, 0.03) と同じ意味になります。
+     * 半透明にしておくと、ライトでもダークでも下地になじみます。
+     */
+    --hover: light-dark(#00000008, #ffffff12);
+    --shadow: light-dark(#00000014, #00000059);
+    --shadow-lg: light-dark(#00000029, #0000008c);
+
+    --danger: light-dark(#f4212e, #ff5b64);              /* 警告文 */
+    --success: light-dark(#00ba7c, #00d992);             /* 「保存しました」 */
+
+    /* 角丸の大きさ。数値を直接書かず変数にすると、統一感を保ちやすくなります */
+    --radius-lg: 14px;
+    --radius: 11px;
+    --radius-sm: 7px;
+}
+
+/* ------------------------------------------------------------------
+ * 全体の初期設定
+ * ------------------------------------------------------------------ */
+
+/*
+ * box-sizing: border-box は「width に padding と border を含める」設定です。
+ * 既定の content-box だと width: 100% の入力欄に padding を足しただけで
+ * 親からはみ出してしまうため、全要素に指定しておくのが定番です。
+ */
+*
+{
+    box-sizing: border-box;
+}
+
+body
+{
+    /*
+     * ポップアップの幅。ポップアップは中身の大きさに合わせて自動でサイズが
+     * 決まるため、body に幅を指定することで実質的にウィンドウ幅を決めています。
+     */
+    width: 500px;
+
+    margin: 0; /* body の既定マージン（8px）を消す */
+    background-color: var(--bg);
+    color: var(--fg);
+
+    /*
+     * font はまとめ書き（ショートハンド）です。「13px/1.5」は
+     * font-size: 13px と line-height: 1.5 を同時に指定しています。
+     * system-ui は OS の標準 UI フォントを使う指定で、
+     * 続く 2 つは日本語が抜け落ちる環境向けの保険です。
+     */
+    font: 13px/1.5 system-ui, "Hiragino Sans", "Noto Sans JP", sans-serif;
+}
+
+/* ------------------------------------------------------------------
+ * ヘッダー
+ * ------------------------------------------------------------------ */
+#header
+{
+    display: flex;          /* 中の要素を横並びにする */
+    align-items: center;    /* 縦方向の中央そろえ */
+    gap: 8px;               /* 要素同士の間隔（margin より管理が楽） */
+    padding: 8px 12px;      /* 上下 8px、左右 12px */
+    background-color: var(--surface);
+    border-bottom: 1px solid var(--line);
+}
+
+#icon
+{
+    width: 20px;
+    height: 20px;
+
+    /*
+     * flex: none は flex: 0 0 auto の短縮形で、
+     * 「伸びない・縮まない」という意味です。
+     * これが無いと、横幅が足りないときにアイコンが押しつぶされます。
+     */
+    flex: none;
+}
+
+#title
+{
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.2px; /* 字間をわずかに広げると見出しが読みやすくなります */
+}
+
+#version
+{
+    color: var(--muted);
+    font-size: 11px;
+
+    /*
+     * tabular-nums は「数字をすべて同じ幅で表示する」指定です。
+     * v3.4.3 → v3.4.10 のように桁が変わっても、文字位置がずれません。
+     */
+    font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------
+ * 本体レイアウト
+ * ------------------------------------------------------------------ */
+main
+{
+    display: flex;
+    flex-direction: column; /* 縦並び */
+    gap: 8px;               /* カード同士の間隔 */
+    padding: 10px 12px 12px; /* 上 10px / 左右 12px / 下 12px */
+}
+
+/* 設定項目をまとめる白いカード */
+.group
+{
+    padding: 10px 12px;
+    background-color: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+
+    /* box-shadow: 横ずれ 縦ずれ ぼかし 色。ごく薄い影で浮き上がらせます */
+    box-shadow: 0 1px 2px var(--shadow);
+}
+
+/* ------------------------------------------------------------------
+ * ファイル名の入力欄まわり
+ * ------------------------------------------------------------------ */
+.field-label
+{
+    /* label は既定でインライン要素なので、block にして改行させます */
+    display: block;
+    margin-bottom: 5px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/*
+ * 属性セレクタ。イコールの前後に空白があっても正しく解釈されます
+ * （input[type="text"] と書いても同じ意味です）。
+ */
+input[type = "text"]
+{
+    width: 100%;
+    padding: 7px 9px;
+    background-color: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+
+    /*
+     * テンプレートは記号が多いので等幅フォントにします。
+     * ui-monospace は OS 標準の等幅フォントを指す新しいキーワードです。
+     */
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px;
+}
+
+input[type = "text"]:focus
+{
+    border-color: var(--accent);
+
+    /*
+     * outline は border と違い、要素の大きさに影響しません。
+     * そのためフォーカス時に線を足しても、レイアウトがずれません。
+     * outline-offset で枠から少し離すと見やすくなります。
+     */
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+#warning
+{
+    /*
+     * 警告が無いときも 1 行分の高さを確保します。
+     * これが無いと、警告が出た瞬間に下の要素が押し下げられてガタつきます。
+     */
+    min-height: 1.3em;
+
+    margin: 6px 0 0; /* p の既定の上下マージンを打ち消し、上だけ 6px 付ける */
+    color: var(--danger);
+    font-size: 11px;
+}
+
+/* ------------------------------------------------------------------
+ * プレビュー表示
+ * ------------------------------------------------------------------ */
+#preview
+{
+    margin-top: 8px;
+    padding: 8px 10px;
+    background-color: var(--bg); /* カードより一段暗く（明るく）してへこんで見せる */
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+}
+
+/* 1 行分（ラベル ＋ 生成結果）を横並びにします */
+#preview div
+{
+    display: flex;
+    gap: 8px;
+    padding: 2px 0;
+}
+
+#preview b
+{
+    /* 幅を固定することで、4 行のファイル名の開始位置が縦にそろいます */
+    flex: none;
+    width: 96px;
+    color: var(--muted);
+    font-weight: 400; /* b タグの既定の太字を解除（意味づけだけ残す） */
+}
+
+#preview code
+{
+    font-family: ui-monospace, Consolas, monospace;
+
+    /*
+     * 長いファイル名を単語の途中でも折り返します。
+     * これが無いと横スクロールが発生してしまいます。
+     */
+    word-break: break-all;
+}
+
+/* ------------------------------------------------------------------
+ * 変数一覧（折りたたみ部分）
+ * ------------------------------------------------------------------ */
+details
+{
+    margin-top: 8px;
+}
+
+summary
+{
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;     /* クリックできることをカーソルの形で伝える */
+    user-select: none;   /* 連打したときに文字が選択されるのを防ぐ */
+}
+
+.ph-group
+{
+    margin-top: 8px;
+}
+
+/* グループ見出し（「作者・投稿」など）を小さな英字ラベル風にします */
+.ph-group h3
+{
+    margin: 0 0 5px;
+    color: var(--muted);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    text-transform: uppercase; /* 英語のときだけ大文字化されます */
+}
+
+/* 変数を挿入するボタン（丸いタグ状） */
+.token
+{
+    /*
+     * inline-flex は「外から見ると文字のように横に並び、
+     * 中身は flex で配置できる」表示方法です。
+     */
+    display: inline-flex;
+    gap: 4px;
+    margin: 0 5px 5px 0; /* 右と下に隙間を作り、折り返しても詰まらないようにする */
+    padding: 3px 8px;
+    background-color: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--line);
+
+    /*
+     * 999px という極端な値は「完全な丸（カプセル形）」を作る定番の書き方です。
+     * 高さの半分以上なら何でもよいので、大きめの値を入れておきます。
+     */
+    border-radius: 999px;
+
+    font-size: 10.5px;
+    cursor: pointer;
+
+    /* 変化させたいプロパティを明示すると、余計な再描画を避けられます */
+    transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.token:hover
+{
+    border-color: var(--accent);
+    background-color: var(--hover);
+}
+
+.token code
+{
+    color: var(--accent);
+    font-family: ui-monospace, Consolas, monospace;
+}
+
+.token span
+{
+    color: var(--muted);
+}
+
+/* ------------------------------------------------------------------
+ * 「重複時の動作」の行
+ * ------------------------------------------------------------------ */
+.row
+{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 2px;
+}
+
+/* > は「直接の子要素だけ」を指す記号です（孫要素には効きません） */
+.row > label
+{
+    flex: none;      /* ラベルは縮ませない */
+    font-size: 12px;
+    font-weight: 400;
+}
+
+select
+{
+    flex: 1; /* 残りの幅をすべて使う（ラベルが flex: none なので成立します） */
+    padding: 6px 8px;
+    background-color: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+
+    /*
+     * フォーム部品は既定でブラウザ独自のフォントを使い、body の指定を継承しません。
+     * font: inherit と書くと body のフォント設定を引き継げます。
+     */
+    font: inherit;
+    font-size: 12px;
+}
+
+select:focus
+{
+    border-color: var(--accent);
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+/* ------------------------------------------------------------------
+ * トグルスイッチ（正体はチェックボックス）
+ * ------------------------------------------------------------------ */
+.checkbox-row
+{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 2px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.checkbox-row span
+{
+    font-size: 12px;
+}
+
+.switch
+{
+    /*
+     * appearance: none で、ブラウザ標準のチェックボックスの見た目を消します。
+     * これにより背景色や角丸を自由に指定できるようになります。
+     */
+    appearance: none;
+
+    flex: none;
+
+    /*
+     * margin-left を auto にすると、flex コンテナ内で
+     * 「左側の余白をすべて自分が吸収する」＝右端に寄る、という動きになります。
+     */
+    margin: 0 0 0 auto;
+
+    width: 30px;
+    height: 16px;
+    background-color: var(--off); /* OFF のときの土台の色 */
+
+    /*
+     * つまみ（丸）を背景のグラデーションとして描いています。
+     *   circle 6px       半径 6px の円
+     *   at 8px 8px       中心の位置（左から 8px、上から 8px ＝ 縦中央）
+     *   var(--knob) 98%  中心から 98% までは白
+     *   #0000            残りは透明（#00000000 の短縮形）
+     * 98% で切り替えているのは、境目をわずかにぼかして
+     * ギザギザに見えるのを防ぐためです。
+     */
+    background-image: radial-gradient(circle 6px at 8px 8px, var(--knob) 98%, #0000);
+    background-repeat: no-repeat;
+
+    border-radius: 8px; /* 高さ 16px の半分＝完全な角丸 */
+    cursor: pointer;
+
+    /*
+     * cubic-bezier は動きの加減速カーブを自分で定義するものです。
+     * この値は「最初に素早く動いて、最後にすっと止まる」動きになり、
+     * スイッチらしい小気味よさが出ます。
+     */
+    transition: background-color 160ms ease, background-position 160ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* :checked はチェックが入っている状態を指す擬似クラスです */
+.switch:checked
+{
+    background-color: var(--accent);
+
+    /*
+     * つまみを右へ 14px ずらします。
+     * 幅 30px、つまみの直径 12px なので、左右に 2px ずつ余白が残る計算です。
+     * 要素を動かすのではなく背景をずらしているだけなので、動作が軽量です。
+     */
+    background-position: 14px 0;
+}
+
+/*
+ * :focus-visible は :focus と違い、
+ * 「キーボード操作でフォーカスしたときだけ」反応します。
+ * マウスクリックで枠が出てうるさくなるのを避けつつ、
+ * キーボード利用者には現在位置がはっきり分かる、という使い分けです。
+ */
+.switch:focus-visible
+{
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+/* ------------------------------------------------------------------
+ * フッター
+ * ------------------------------------------------------------------ */
+.footer
+{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-top: 4px;
+}
+
+.reset
+{
+    padding: 6px 14px;
+    background-color: var(--surface);
+    color: var(--fg);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.reset:hover
+{
+    background-color: var(--surface-hover);
+    border-color: var(--muted);
+}
+
+.reset:focus-visible
+{
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+/* 「保存しました」の表示 */
+#status
+{
+    color: var(--success);
+    font-size: 11px;
+    font-weight: 600;
+
+    /*
+     * display: none ではなく opacity: 0 で隠している理由は 2 つあります。
+     *   ・場所を確保したままなので、表示された瞬間にレイアウトが動かない
+     *   ・display はアニメーションできないが、opacity はできる
+     * popup.js が .show クラスを付け外しして切り替えます。
+     */
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+#status.show
+{
+    opacity: 1;
+}
+
+/* ------------------------------------------------------------------
+ * アクセシビリティ対応
+ * OS の「視差効果を減らす」設定が有効な人には、アニメーションを止めます。
+ * 動きによって体調を崩す方がいるため、対応が推奨されています。
+ * !important は、個別に指定された transition よりも優先させるためです。
+ * ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce)
+{
+    *
+    {
+        transition: none !important;
+    }
+}

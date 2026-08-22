@@ -1,0 +1,139 @@
+<!-- SPDX-License-Identifier: Apache-2.0 OR MIT -->
+<!DOCTYPE html>
+
+<!--
+    popup.html
+    ==================================================================
+    ツールバーのアイコンを押したときに開く設定画面。
+    manifest.json では 2 か所から参照されています。
+
+      action.default_popup   → アイコンクリックで小さなポップアップとして表示
+      options_ui.page        → 拡張機能の管理画面から「オプション」で開く
+                               （open_in_tab: true なのでタブとして開きます）
+
+    このファイルには「箱」だけを書き、中の文字は一切書いていません。
+    表示される文言はすべて popup.js が実行時に流し込みます。
+    多言語対応のため、日本語や英語を直接書けないからです。
+    ==================================================================
+-->
+
+<!--
+    lang 属性は仮の値です。popup.js が起動時に
+    ブラウザの表示言語（api.i18n.getUILanguage()）で上書きします。
+-->
+<html lang="en">
+
+<head>
+    <!-- 日本語や絵文字が文字化けしないよう、文字コードを最初に宣言します -->
+    <meta charset="utf-8">
+
+    <link rel="stylesheet" href="popup.css" />
+
+    <!--
+        スクリプトの読み込み順が重要です。
+
+        shared/template.js が globalThis.SMD を定義し、
+        popup.js がその SMD を使うため、必ずこの順番でなければいけません。
+
+        defer を付けると「HTML の読み込みが終わってから、書いた順に実行」
+        となります。これにより
+          ・DOM が未完成の状態で要素を探して失敗する
+          ・popup.js が先に走って SMD が未定義になる
+        の 2 つを同時に防げます。
+    -->
+    <script src="shared/template.js" defer></script>
+    <script src="popup.js" defer></script>
+
+    <!--
+        data-i18n は独自の目印です。popup.js が
+        document.querySelectorAll("[data-i18n]") でまとめて拾い、
+        属性値をキーとして翻訳文を textContent に入れます。
+        そのためタグの中身は空にしておきます。
+    -->
+    <title data-i18n="actionTitle"></title>
+</head>
+
+<body>
+    <!-- ============ ヘッダー：アイコン ＋ 拡張機能名 ＋ バージョン ============ -->
+    <div id="header">
+        <!--
+            alt="" は「この画像は装飾なので読み上げ不要」という意思表示です。
+            alt を書き忘れるのとは意味が違い、空文字を明示するのが正解です。
+
+            #version の中身は popup.js が manifest.json の値から埋めます
+            （手書きしないので、更新時に書き換え忘れる心配がありません）。
+        -->
+        <img id="icon" src="icons/48.png" alt="" /><span id="title" data-i18n="extName"></span><span id="version"></span>
+    </div>
+
+    <main>
+        <!-- ============ グループ 1：ファイル名テンプレート ============ -->
+        <div class="group">
+            <!--
+                label の for 属性に input の id を書くと 2 つが結び付き、
+                ラベルをクリックしただけで入力欄にカーソルが入ります。
+                スクリーンリーダーにも「この欄の名前」として伝わります。
+
+                spellcheck="false"    テンプレートは英単語ではないので赤波線を止める
+                autocomplete="off"    過去の入力候補が邪魔なので出さない
+
+                #warning は空の p です。中身は popup.js が入れますが、
+                CSS 側で min-height を指定してあるため、警告が出たり消えたりしても
+                下のレイアウトがガタつきません。
+            -->
+            <label class="field-label" for="file" data-i18n="labelFile"></label><input type="text" id="file" spellcheck="false" autocomplete="off"><p id="warning"></p>
+
+            <!-- ライブプレビューの表示先。popup.js が 4 パターンのサンプルを描画します -->
+            <div id="preview"></div>
+
+            <!--
+                details と summary は HTML 標準の折りたたみ機能です。
+                JavaScript を書かなくても、summary をクリックするだけで開閉します。
+                #placeholders の中の変数ボタンは popup.js が生成します。
+            -->
+            <details>
+                <summary data-i18n="placeholderList"></summary>
+                <div id="placeholders"></div>
+            </details>
+        </div>
+
+        <!-- ============ グループ 2：保存時の動作 ============ -->
+        <div class="group">
+            <div class="row">
+                <!--
+                    value 属性の値（uniquify / overwrite / prompt）は、
+                    そのまま chrome.downloads API の conflictAction に渡される
+                    決められた文字列です。表示名は翻訳されますが、値は変更できません。
+                -->
+                <label for="conflictAction" data-i18n="labelConflict"></label><select id="conflictAction">
+                    <option value="uniquify" data-i18n="optUniquify"></option>
+                    <option value="overwrite" data-i18n="optOverwrite"></option>
+                    <option value="prompt" data-i18n="optPrompt"></option>
+                </select>
+            </div>
+
+            <!--
+                ここでは label が input を「包んで」います。
+                この書き方なら for と id を対応させなくても結び付き、
+                行のどこをクリックしてもスイッチが切り替わります。
+
+                見た目はトグルスイッチですが、正体はただのチェックボックスです。
+                CSS の appearance: none で標準の見た目を消し、
+                背景とグラデーションでスイッチ風に描き直しています（popup.css 参照）。
+            -->
+            <label class="checkbox-row"><span data-i18n="labelAlwaysSaveAs"></span><input class="switch" type="checkbox" id="alwaysSaveAs"></label>
+        </div>
+
+        <!-- ============ フッター：リセットボタン ＋ 保存表示 ============ -->
+        <!--
+            この画面には form タグも「保存」ボタンもありません。
+            入力するたびに popup.js が自動保存する方式なので、
+            #status に「保存しました」を一瞬だけ表示するだけで足ります。
+        -->
+        <div class="footer">
+            <button class="reset" id="reset" data-i18n="btnReset"></button><span id="status" data-i18n="statusSaved"></span>
+        </div>
+    </main>
+</body>
+
+</html>
