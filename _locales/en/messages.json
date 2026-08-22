@@ -1,6 +1,6 @@
 {
     "extName": { "message": "SNS Media Downloader" },
-    "extDesc": { "message": "Download images and videos directly from individual X (Twitter) and Bluesky posts — no official API, no ZIP." },
+    "extDesc": { "message": "Download images and videos directly from individual X (Twitter) and Bluesky posts." },
     "actionTitle": { "message": "Filename settings" },
     "labelFile": { "message": "Filename" },
     "placeholderList": { "message": "Placeholder list" },

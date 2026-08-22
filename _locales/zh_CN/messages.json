@@ -1,6 +1,6 @@
 {
     "extName": { "message": "SNS Media Downloader" },
-    "extDesc": { "message": "从 X（推特）和 Bluesky 的单条帖子中直接下载图片和视频（不使用官方 API，不打包 ZIP）" },
+    "extDesc": { "message": "从 X（推特）和 Bluesky 的单条帖子中直接下载图片和视频" },
     "actionTitle": { "message": "文件名设置" },
     "labelFile": { "message": "文件名" },
     "placeholderList": { "message": "占位符列表" },

@@ -1,6 +1,6 @@
 {
     "extName": { "message": "SNS Media Downloader" },
-    "extDesc": { "message": "Baixe imagens e vídeos diretamente de publicações individuais do X (Twitter) e do Bluesky — sem API oficial e sem ZIP." },
+    "extDesc": { "message": "Baixe imagens e vídeos diretamente de publicações individuais do X (Twitter) e do Bluesky." },
     "actionTitle": { "message": "Configurações do nome do arquivo" },
     "labelFile": { "message": "Nome do arquivo" },
     "placeholderList": { "message": "Lista de espaços reservados" },
