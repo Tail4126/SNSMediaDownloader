@@ -9,6 +9,63 @@
 
 ## [未リリース]
 
+## [1.1.0] - 2026-08-26
+
+### 追加
+
+**バックグラウンド**
+
+- ダウンロードに失敗した項目を最大 3 回まで再試行するようにした（初回とあわせて最大 4 回）。
+  `downloads.download()` は「開始できた」時点で解決するため、これまでは 404 や通信断でも
+  成功として数えていた。開始後は `downloads.search()` で 0.5 秒ごとに状態を確認し、
+  `complete` になって初めて成功として数える。
+- 再試行の待ち時間は 0.3 秒 → 0.8 秒 → 1.5 秒と延ばす。一時的な混雑が原因の場合に、
+  間を置いたほうが成功しやすいため。
+- 何度試しても結果が変わらない中断理由（`USER_CANCELED` / `SERVER_BAD_CONTENT`(404) /
+  `SERVER_FORBIDDEN` / `FILE_NO_SPACE` など）は再試行せずその場で打ち切る。
+- 最終的に保存できなかった項目は `downloads.erase()` でダウンロード履歴から取り除く。
+  中断されたダウンロードの書きかけファイルはブラウザ自身が破棄するため、
+  これで壊れたファイルも失敗の記録も残らない。
+- 一時停止などで上限時間（10 分）まで終わらなかった場合は、進行中の項目に手出しをせず
+  失敗として返すだけにする。進行中のものを `erase()` すると追跡できないダウンロードが残るため。
+- 0.5 秒ごとの状態確認は、サービスワーカーのアイドル判定をリセットする効果も持つ。
+  長い動画のダウンロード中にバックグラウンドが停止する問題も同時に塞がる。
+
+**インターフェース・多言語**
+
+- 1 件も保存できなかった場合の専用トースト `toastFailed` を追加した。従来は
+  `toastPartial` により「0件保存 / 3件失敗」と表示されていた。9 言語すべてに追加。
+
+### 変更
+
+**Bluesky 対応**
+
+- 投稿日時に `indexedAt`（サーバーが投稿を受け取った時刻）のみを使うようにし、
+  `record.createdAt` へのフォールバックを削除した。`createdAt` は投稿者の端末が
+  自己申告した値で、時計のずれや意図的な書き換えがあり得るため。
+  `indexedAt` が取れない投稿では日時系の変数がすべて空になる。
+  なお `indexedAt` は `app.bsky.feed.defs#postView` の必須フィールドであり、
+  フォールバックは実際には発火していなかったため、保存されるファイル名は変わらない。
+
+### 修正
+
+**設計**
+
+- 対応する Firefox の下限について、文書側の記載を実態へ合わせた（「128.0 以降」→「140.0 以降」）。
+  `manifest-firefox.json` の `strict_min_version` は 1.0.0 の時点から `140.0` であり、
+  README 英日と CONTRIBUTING.md の記載だけが古いまま食い違っていた。
+  下限が 140 なのは `browser_specific_settings.gecko.data_collection_permissions`
+  （「個人データを一切収集しない」の宣言）を Firefox が 140 以降でしか解釈しないためで、
+  MAIN world のコンテンツスクリプトだけなら 128 で足りる。Mozilla も、宣言が黙って
+  無視される環境へインストールされないよう `strict_min_version` を合わせることを推奨している。
+  マニフェスト自体は変更していない。
+
+### セキュリティ
+
+- `downloads` 権限の使い方が「開始のみ」から「開始・状態の確認・失敗項目の削除」へ広がった。
+  確認は開始時に受け取ったダウンロード ID を指定して行い、他のダウンロード履歴は参照しない。
+  PRIVACY.md の §1.3・§2 と「最終更新」日、および README 英日のプライバシー節を更新した。
+
 ## [1.0.2] - 2026-08-24
 
 ### 変更
@@ -231,5 +288,8 @@
 
 </details>
 
-[未リリース]: https://github.com/Tail4126/SNSMediaDownloader/compare/v1.0.0...HEAD
+[未リリース]: https://github.com/Tail4126/SNSMediaDownloader/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Tail4126/SNSMediaDownloader/compare/v1.0.2...v1.1.0
+[1.0.2]: https://github.com/Tail4126/SNSMediaDownloader/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/Tail4126/SNSMediaDownloader/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Tail4126/SNSMediaDownloader/releases/tag/v1.0.0

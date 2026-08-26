@@ -11,6 +11,8 @@
  * ただし DOM からは本文・投稿日時・正確な拡張子・解像度が取れないので、
  * 保存時に 1 回だけ API を呼んで情報を補います。
  * API が失敗しても DOM 由来の情報だけでダウンロードは成立します。
+ *
+ * なお投稿日時は indexedAt のみを採用し、createdAt は使いません（readRecord を参照）。
  * ==================================================================
  */
 
@@ -178,9 +180,12 @@
                 name: post?.author?.displayName ?? "",
                 text: record.text ?? "",
 
-                // indexedAt はサーバー受信時刻、createdAt は投稿者の端末時刻。
-                // 端末時刻はずれていることがあるので indexedAt を優先します。
-                time: post?.indexedAt ?? record.createdAt ?? null,
+                // 投稿日時は indexedAt（サーバーが投稿を受け取った時刻）だけを使います。
+                // record.createdAt は投稿者の端末が自己申告した時刻で、時計のずれや
+                // 意図的な書き換えがあり得るため、値として信用しません。
+                // indexedAt が取れない場合は null のままにし、日時系の変数を空にします。
+                // 誤った日時でファイル名を作るより、空にしたほうが害が小さいためです。
+                time: post?.indexedAt ?? null,
             },
         };
     };

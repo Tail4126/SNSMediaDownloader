@@ -19,6 +19,7 @@
     "toastCommError": { "message": "Error de comunicación con la extensión. Recarga la página" },
     "toastDone": { "message": "$1 archivo(s) descargado(s)" },
     "toastPartial": { "message": "$1 guardado(s) / $2 fallido(s)" },
+    "toastFailed": { "message": "No se pudo descargar $1 archivo(s)" },
     "btnMainTitle": { "message": "Guardar medios" },
     "btnItemTitle": { "message": "Guardar solo el elemento $1" },
     "grpPost": { "message": "Autor y publicación" },

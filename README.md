@@ -36,6 +36,9 @@ Saving one image from a post is a right-click away. Everything past that gets te
   thumbnail saves just that one (it appears once a post has two or more).
 * 🏷️ **Filename templates** — 24 placeholders, subfolders, conditional blocks, per-variable length
   limits, and a live preview of four sample posts while you type.
+* 🔁 **Failed transfers are retried** — up to three times, with a growing pause between attempts.
+  Anything that still won't come down is reported as an error and cleared away, rather than left in
+  your download folder as a broken file.
 * 🔑 **No API keys, no account** — nothing to register, nothing to sign in to.
 * 🌍 **9 UI languages** — English, 日本語, 한국어, Deutsch, Español, Français, Português (BR),
   简体中文, 繁體中文.
@@ -93,7 +96,8 @@ should confirm how many files were saved.
 | **Item button** | Top-right corner of each thumbnail. Only appears when the post has **two or more** items. | That one item |
 
 The result is reported as a toast in the corner of the screen — how many saved, and how many
-failed if any did.
+failed if any did. A file that fails is retried up to three times before it counts as failed, and a
+transfer that never completes is cleared away instead of leaving a partial file behind.
 
 ### What it deliberately leaves alone
 
@@ -243,8 +247,10 @@ identifies the file by its content, which is all `com.atproto.sync.getBlob` need
 
 What the DOM *doesn't* give you is the post text, the timestamp, the true MIME type, or the
 resolution. So when you press save, the extension calls `app.bsky.feed.getPosts` **once** and
-fills those in. The blob itself is then fetched from the author's own PDS, resolved through
-`plc.directory` (or the `did:web` document) and falling back to `bsky.social`.
+fills those in. The timestamp it takes is `indexedAt` — the moment the server received the post.
+`record.createdAt` is whatever the author's device claimed it was, and isn't used at all. The blob
+itself is then fetched from the author's own PDS, resolved through `plc.directory` (or the
+`did:web` document) and falling back to `bsky.social`.
 
 Every one of those calls is optional. If the API is unreachable, the DID and CID from the DOM
 are enough to build a working download URL — you just lose the nicer metadata.
@@ -259,6 +265,23 @@ skipped.
 Item buttons need an ancestor that has a size and doesn't contain any *other* media in the post
 — otherwise every button in a four-image grid would stack in the same corner. `anchorOf()` walks
 up from the thumbnail until it finds one, and gives up if it can't.
+
+### Saving, and what happens when it fails
+
+`downloads.download()` resolves as soon as the browser has *started* the transfer, which means its
+return value can't tell a completed file from a 404. So the background script keeps the download id
+and polls `downloads.search({ id })` every 500 ms until the item leaves `in_progress`. Only
+`complete` counts as a success.
+
+Anything else is retried — three times, waiting 0.3 s, then 0.8 s, then 1.5 s. Interruption reasons
+that can't change on a second attempt (`USER_CANCELED`, a 404, a 403, no disk space, and so on)
+skip the retries and fail immediately. Each failed attempt is erased from the download history
+before the next one, so a file that never arrives leaves nothing behind — no broken file, no row in
+the downloads list.
+
+The polling has a second, useful effect: each `downloads.search()` call resets the service worker's
+idle timer, so the background script survives a long video download instead of being shut down
+halfway through.
 
 ---
 
@@ -280,6 +303,12 @@ domain, which isn't in `host_permissions`, so the PDS can't be resolved and the 
 back to `bsky.social` — where the blob isn't. Adding `"https://*/*"` to `host_permissions` in
 `manifest.json` fixes it, at the cost of granting read access to every site. The default is
 deliberately narrow.
+
+**"Failed to download N file(s)."**
+The transfer was attempted four times — once, then three retries — and never completed. On Bluesky
+this usually means the PDS lookup landed on the wrong server (see the `did:web` entry above); on X
+it usually means the media URL had already expired, and reloading the page gets a fresh one. The
+failed attempts are erased, so there's no half-written file to clean up.
 
 **Files are saved without an extension.**
 Your template is missing `{ext}` — the warning line under the input says so.
@@ -306,12 +335,19 @@ last write wins.
 
 * **Manifest version:** V3
 * **Google Chrome / Chromium-based browsers:** v123 or later
-* **Mozilla Firefox:** v128.0 or later
+* **Mozilla Firefox:** v140.0 or later
 
-Both floors come from features the extension actually uses: MAIN-world content scripts
-(Chrome 111 / Firefox 128) are what make the X interceptor possible, and the settings screen's
-colours are built on `light-dark()` (Chrome 123 / Firefox 120). Firefox 128 is also an ESR, so
-ESR users are covered without a separate line.
+Both floors come from things the extension actually uses. On Chrome it's `light-dark()` in the
+settings screen (Chrome 123); MAIN-world content scripts, which make the X interceptor possible,
+only need Chrome 111.
+
+On Firefox the binding constraint isn't a JavaScript or CSS feature at all — it's
+`browser_specific_settings.gecko.data_collection_permissions`, the key that declares this
+extension collects nothing. Firefox only understands it from **140** onwards, and Mozilla's own
+guidance is to set `strict_min_version` to match so the extension can't install somewhere the
+declaration would be silently ignored. (MAIN-world content scripts would have been satisfied by
+Firefox 128.) Firefox 140 is also the current ESR, so ESR users are covered without a separate
+line.
 
 **Firefox for Android is not supported.** The `downloads` API — which is the entire point of this
 extension — is documented inconsistently there, and `saveAs: true` is known to raise an error.
@@ -323,9 +359,10 @@ Until that's tested on real hardware, claiming support would be guessing.
 
 No analytics, no telemetry, no identifiers, no ads, and no server belonging to the developer.
 
-The extension asks for two permissions — `downloads` to save files, and `storage` to remember
-your three settings — plus access to `x.com`, `twitter.com`, `bsky.app`,
-`public.api.bsky.app` and `plc.directory`.
+The extension asks for two permissions — `downloads` to save files (and to follow each save to
+completion, so failures can be retried and cleared away), and `storage` to remember your three
+settings — plus access to `x.com`, `twitter.com`, `bsky.app`, `public.api.bsky.app` and
+`plc.directory`.
 
 It does make network requests, and it's worth being precise about which: **only when you press a
 save button**, and only to Bluesky's public API and the author's PDS. On X it makes no requests
@@ -342,7 +379,7 @@ view or save is recorded or transmitted. Full details in [PRIVACY.md](PRIVACY.md
 manifest.json             Extension manifest (MV3) — a byte-for-byte copy of manifest-chrome.json
 manifest-chrome.json      Chrome variant: minimum_chrome_version, service-worker background
 manifest-firefox.json     Firefox variant: browser_specific_settings, event-page background
-background.js             Service worker: downloads, Bluesky API, DID → PDS resolution, caching
+background.js             Service worker: downloads (with retries), Bluesky API, DID → PDS resolution, caching
 popup.html/.css/.js       Settings UI (also serves as the options page)
 content.css               Button and toast styles, injected into both sites
 shared/template.js        SMD  — i18n, filename templates, defaults

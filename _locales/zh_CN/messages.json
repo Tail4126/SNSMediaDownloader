@@ -19,6 +19,7 @@
     "toastCommError": { "message": "与扩展程序通信失败，请重新加载页面" },
     "toastDone": { "message": "已下载 $1 个文件" },
     "toastPartial": { "message": "已保存 $1 个 / 失败 $2 个" },
+    "toastFailed": { "message": "$1 个文件下载失败" },
     "btnMainTitle": { "message": "保存媒体" },
     "btnItemTitle": { "message": "仅保存第 $1 个" },
     "grpPost": { "message": "作者・帖子" },

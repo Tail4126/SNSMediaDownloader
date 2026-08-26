@@ -1,6 +1,6 @@
 # Privacy Policy / プライバシーポリシー
 
-**Last updated / 最終更新:** 2026-08-22
+**Last updated / 最終更新:** 2026-08-26
 
 > **Note on Language / 言語に関する注記**
 > このポリシーは英語で書いたものが正式版で、日本語訳は参考用です。両者の内容にズレがあった場合は英語版を優先します。
@@ -79,9 +79,12 @@ within a minute. Neither is ever written to disk or sent anywhere.
 #### 1.3 The files you download
 
 They go where your browser puts downloads, under the name your template produced. The Extension
-hands the URL and the filename to the browser's download API and takes no further part. It does
-not read your download history, and it does not use the `downloads` permission for anything other
-than starting these downloads.
+hands the URL and the filename to the browser's download API, then follows that one download until
+it settles, so a failed transfer can be retried and a transfer that fails for good can be cleared
+away instead of leaving a broken file behind. It looks the download up **by the numeric id it was
+just given**, and never lists, reads, or touches any other download. Beyond starting, following and
+cleaning up the downloads you asked for, the `downloads` permission isn't used for anything — and
+nothing about those downloads is stored or sent anywhere.
 
 ---
 
@@ -91,7 +94,7 @@ Two permissions:
 
 | Permission | Why |
 | :--- | :--- |
-| **`downloads`** | To start the downloads you asked for. |
+| **`downloads`** | To start the downloads you asked for, follow each one to completion, and retry or clear away the ones that fail. |
 | **`storage`** | To save and load the three settings above. |
 
 Content scripts run on these sites, and nowhere else:
@@ -259,8 +262,13 @@ X 側のキャッシュは上限 2000 件で古い順に破棄され、ページ
 #### 1.3 ダウンロードしたファイル
 
 ブラウザが通常ダウンロードを置く場所へ、テンプレートが生成した名前で保存されます。
-本拡張機能は URL とファイル名をブラウザのダウンロード API へ渡すだけで、それ以降には関与しません。
-ダウンロード履歴を読むことはなく、`downloads` 権限をこのダウンロードの開始以外の目的で使うこともありません。
+本拡張機能は URL とファイル名をブラウザのダウンロード API へ渡したあと、その 1 件が
+終わったかどうかだけを追跡します。失敗したときに再試行し、最終的に駄目だった項目を
+履歴から取り除くためです（壊れたファイルを残さないための処理です）。
+確認は**開始時に受け取ったダウンロード ID を指定して**行い、他のダウンロードを
+一覧したり読み取ったりすることはありません。`downloads` 権限を、あなたが指示した
+ダウンロードの開始・追跡・後片付け以外の目的で使うこともありません。
+その内容はどこにも保存も送信もされません。
 
 ---
 
@@ -270,7 +278,7 @@ X 側のキャッシュは上限 2000 件で古い順に破棄され、ページ
 
 | 権限 | 理由 |
 | :--- | :--- |
-| **`downloads`** | 指示されたダウンロードを開始するため |
+| **`downloads`** | 指示されたダウンロードを開始し、完了まで追跡し、失敗したものを再試行・後片付けするため |
 | **`storage`** | 上記 3 つの設定を保存・読み込みするため |
 
 コンテンツスクリプトが動くのは以下のサイトだけです。
