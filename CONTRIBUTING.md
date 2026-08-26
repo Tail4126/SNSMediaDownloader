@@ -40,7 +40,8 @@ as-is.
   needs an issue first, and needs to be added to PRIVACY.md in the same PR.
 * **No new permissions** beyond `downloads` and `storage` without discussing it in an issue first.
   Widening `host_permissions` counts.
-* **Manifest V3 only.** Chrome 123+ / Firefox 128.0+.
+* **Manifest V3 only.** Chrome 123+ / Firefox 140.0+ — the Firefox floor comes from
+  `data_collection_permissions`, not from a JS feature. Don't lower it without dropping that key.
 * **Never widen what gets downloaded.** URLs handed to `chrome.downloads` must be `https://` and
   must come from the post the user clicked. Both the message receiver and the download handler
   validate this independently — keep both.
@@ -195,7 +196,8 @@ JSON ファイル（`manifest.json`、`_locales/*/messages.json`）は対象外�
   同じプルリクエストで PRIVACY.md も更新してください。
 * **`downloads` と `storage` 以外の権限は追加しません。** `host_permissions` を広げるのも同じ扱いです。
   必要になったら、まず Issue で相談してください。
-* **Manifest V3 のみ。** Chrome 123 以降 / Firefox 128.0 以降。
+* **Manifest V3 のみ。** Chrome 123 以降 / Firefox 140.0 以降。Firefox 側の下限は JS の機能ではなく
+  `data_collection_permissions` に由来します。このキーを外さない限り下げないでください。
 * **ダウンロードする対象を広げないこと。** `chrome.downloads` へ渡す URL は `https://` で始まり、
   かつユーザーがクリックした投稿由来のものに限ります。メッセージ受信時とダウンロード直前の
   2 か所で独立に検証しています。両方とも残してください。

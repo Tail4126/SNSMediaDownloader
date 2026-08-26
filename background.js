@@ -5,7 +5,7 @@
  * バックグラウンドスクリプト（Manifest V3 では Service Worker）。
  *
  * ページ上の content script からは使えない機能を、ここで代行します:
- *   - chrome.downloads によるファイル保存
+ *   - chrome.downloads によるファイル保存（失敗時の再試行と後片付けを含む）
  *   - 外部 API へのアクセス（CORS の制約を受けない）
  *   - 結果のキャッシュ（同じ投稿を何度も開いても API を叩き直さない）
  *
@@ -22,6 +22,50 @@ const PDS = "https://bsky.social";
 
 /** 投稿情報の取得に使う公開 API（AppView）のベース URL */
 const APPVIEW = "https://public.api.bsky.app/xrpc";
+
+/** ダウンロードに失敗したときに再試行する回数（初回の 1 回は含みません） */
+const MAX_RETRY = 3;
+
+/**
+ * 再試行の前に待つ時間（ミリ秒）。1 回目・2 回目・3 回目の順に延ばします。
+ * 一時的な混雑が原因のときは、少し間を置いたほうが成功しやすいためです。
+ */
+const RETRY_WAIT = [300, 800, 1500];
+
+/** ダウンロードの進み具合を確認する間隔（ミリ秒） */
+const POLL_INTERVAL = 500;
+
+/** 1 件のダウンロードを待つ上限（ミリ秒）。大きな動画でも足りるよう長めにしてあります */
+const POLL_LIMIT = 10 * 60 * 1000;
+
+/**
+ * 何度やり直しても結果が変わらない中断理由の一覧。
+ * これらが返ってきた場合は再試行せず、その場で失敗として打ち切ります。
+ * 文字列はブラウザの downloads API が返す InterruptReason です。
+ */
+const FATAL = new Set([
+    "USER_CANCELED",             // 保存ダイアログでキャンセルされた
+    "USER_SHUTDOWN",             // ブラウザが終了した
+    "SERVER_BAD_CONTENT",        // 404。その URL にファイルが無い
+    "SERVER_UNAUTHORIZED",       // 401
+    "SERVER_FORBIDDEN",          // 403
+    "FILE_ACCESS_DENIED",        // 保存先に書き込めない
+    "FILE_NO_SPACE",             // 空き容量が足りない
+    "FILE_NAME_TOO_LONG",        // ファイル名が長すぎる
+    "FILE_TOO_LARGE",
+    "FILE_BLOCKED",              // ブラウザや別の拡張機能の方針で止められた
+    "FILE_SECURITY_CHECK_FAILED",
+    "FILE_VIRUS_INFECTED",
+]);
+
+/**
+ * 指定したミリ秒だけ待つ。
+ * setTimeout を Promise で包むと、await で「ここで待つ」と素直に書けるようになります。
+ *
+ * @param {number} ms - 待つ時間（ミリ秒）
+ * @returns {Promise<void>}
+ */
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * 取得結果を覚えておく簡易キャッシュ。
@@ -145,12 +189,93 @@ const postOf = (did, rkey) => once(`post:${did}/${rkey}`, async () => {
 });
 
 /**
+ * ダウンロード 1 件が終わるまで待ち、成功したかどうかを返す。
+ *
+ * downloads.download() は「開始できた」時点で解決してしまうため、その戻り値だけでは
+ * 404 や通信断に気づけません（成功と区別が付きません）。そこで downloads.search() で
+ * 状態を繰り返し確認し、"in_progress" でなくなるまで待ちます。
+ *
+ * 副次的な効果として、この定期的な API 呼び出しがサービスワーカーのアイドル判定を
+ * リセットするため、長いダウンロードの最中にバックグラウンドが止まるのも防げます。
+ *
+ * @param {number} id - downloads.download() が返したダウンロード ID
+ * @returns {Promise<{ok: boolean, error: string}>} ok が true なら保存完了
+ */
+const finished = async (id) => {
+    for (let waited = 0; waited < POLL_LIMIT; waited += POLL_INTERVAL) {
+        // search は id を指定すると、その 1 件だけが入った配列を返します。
+        // [item] は分割代入で「配列の 0 番目を取り出す」書き方です。
+        const [item] = await api.downloads.search({ id }).catch(() => []);
+
+        // 見つからない場合（履歴から消された等）は追跡できないので失敗扱いにします。
+        if (!item) return { ok: false, error: "NOT_FOUND" };
+
+        if (item.state === "complete") return { ok: true, error: "" };
+        if (item.state === "interrupted") return { ok: false, error: item.error ?? "INTERRUPTED" };
+
+        // まだ転送中なので、少し待ってからもう一度確認します。
+        // 待つ前に 1 回目の確認を済ませているので、小さい画像なら待ち時間ゼロで終わります。
+        await sleep(POLL_INTERVAL);
+    }
+
+    // 上限まで待っても終わらなかった場合（一時停止されたときなど）。
+    return { ok: false, error: "TIMEOUT" };
+};
+
+/**
+ * ファイルを 1 件保存する。失敗した場合は MAX_RETRY 回まで再試行し、
+ * それでも駄目なら諦めて false を返す。
+ *
+ * 最終的に失敗した項目は downloads.erase() で履歴から取り除きます。
+ * 中断されたダウンロードの書きかけファイルはブラウザ自身が破棄するため、
+ * これで「壊れたファイルだけが残る」状態を防げます。
+ *
+ * @param {{url: string, filename: string}} item - 保存する 1 件
+ * @param {{conflictAction: string, saveAs: boolean}} options - ダウンロード API へ渡す設定
+ * @returns {Promise<boolean>} 最終的に保存できたら true
+ */
+const saveOne = async (item, options) => {
+    // attempt は 0 始まり。0 が初回で、1〜MAX_RETRY が再試行にあたります。
+    for (let attempt = 0; attempt <= MAX_RETRY; attempt += 1) {
+        let id;
+
+        try {
+            id = await api.downloads.download({ ...item, ...options });
+        } catch {
+            // ここで例外になるのは、保存ダイアログをキャンセルした場合など、
+            // ダウンロードを開始すらできなかったときです。やり直す意味がないので打ち切ります。
+            return false;
+        }
+
+        const { ok, error } = await finished(id);
+        if (ok) return true;
+
+        // まだ終わっていないだけ（一時停止など）の場合は、こちらから手出しをしません。
+        // 進行中のものを erase すると、追跡できないダウンロードが残ってしまうためです。
+        if (error === "TIMEOUT") return false;
+
+        // 失敗した項目は「失敗」として履歴に残るので、消しておきます。
+        // catch を付けているのは、消せなくても本筋には影響しないためです。
+        await api.downloads.erase({ id }).catch(() => {});
+
+        // 何度試しても同じ結果になる種類の失敗は、ここで打ち切ります。
+        if (FATAL.has(error)) return false;
+
+        // 最後の試行だったなら、もう待つ必要はありません。
+        if (attempt < MAX_RETRY) await sleep(RETRY_WAIT[attempt] ?? 1500);
+    }
+
+    return false;
+};
+
+/**
  * content script から送られてくるメッセージの種類ごとの処理をまとめた表。
  * message.type がそのままキーになります。
  */
 const HANDLERS = {
     /**
      * ファイルをダウンロードする。
+     * 1 件ずつ順に保存し、失敗したものは最大 MAX_RETRY 回まで再試行します。
      *
      * @param {object} message
      * @param {{url: string, filename: string}[]} [message.items=[]] - 保存するファイルの一覧
@@ -166,14 +291,10 @@ const HANDLERS = {
             // https 以外（javascript: や file: など）を弾くのが目的です。
             if (typeof url !== "string" || !url.startsWith("https://") || !filename) continue;
 
-            try {
-                // await を付けて 1 件ずつ順番に保存します（同時実行すると失敗しやすいため）。
-                await api.downloads.download({ url, filename, conflictAction, saveAs });
-                done += 1;
-            } catch {
-                // 1 件失敗しても残りは続行したいので、ここでは何もしません。
-                // 失敗数は最後に items.length との差分で計算します。
-            }
+            // await を付けて 1 件ずつ順番に保存します（同時実行すると失敗しやすいため）。
+            // 再試行と後片付けは saveOne の中で面倒を見ます。
+            // 1 件失敗しても残りは続行し、失敗数は最後に items.length との差分で計算します。
+            if (await saveOne({ url, filename }, { conflictAction, saveAs })) done += 1;
         }
 
         return { done, failed: items.length - done };

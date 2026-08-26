@@ -135,9 +135,14 @@ globalThis.SMDCore = (() => {
         // background が落ちている場合などは null が返ります。
         if (!result) return toast(SMD.t("toastCommError"), true);
 
-        // 7. 結果を通知。1 件でも失敗があれば「成功 n / 失敗 m」形式にします。
+        // 7. 結果を通知。全件成功・一部失敗・全件失敗の 3 通りに分けます。
+        //    background 側で最大 4 回まで試したうえで駄目だったものが failed に入るため、
+        //    「1 件も保存できなかった」場合は専用の文言ではっきりエラーとして出します。
         const { done, failed } = result;
-        toast(failed ? SMD.t("toastPartial", done, failed) : SMD.t("toastDone", done), Boolean(failed));
+
+        if (!failed) return toast(SMD.t("toastDone", done));
+
+        toast(done ? SMD.t("toastPartial", done, failed) : SMD.t("toastFailed", failed), true);
     };
 
     /**

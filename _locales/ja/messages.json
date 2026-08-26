@@ -19,6 +19,7 @@
     "toastCommError": { "message": "拡張機能との通信に失敗しました。ページを再読み込みしてください" },
     "toastDone": { "message": "$1件をダウンロードしました" },
     "toastPartial": { "message": "$1件保存 / $2件失敗" },
+    "toastFailed": { "message": "$1件のダウンロードに失敗しました" },
     "btnMainTitle": { "message": "メディアを保存" },
     "btnItemTitle": { "message": "$1件目だけを保存" },
     "grpPost": { "message": "投稿者・投稿" },
