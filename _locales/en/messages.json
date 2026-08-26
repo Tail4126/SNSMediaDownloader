@@ -9,6 +9,7 @@
     "optOverwrite": { "message": "Overwrite" },
     "optPrompt": { "message": "Ask every time" },
     "labelAlwaysSaveAs": { "message": "Always show the save dialog" },
+    "labelLikeDownload": { "message": "Also download when you like a post" },
     "btnReset": { "message": "Restore defaults" },
     "statusSaved": { "message": "Saved" },
     "warnBracket": { "message": "Unbalanced [ ]" },

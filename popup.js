@@ -41,13 +41,17 @@
     /**
      * 設定項目の id と、その値を読み書きするプロパティ名の対応表。
      * チェックボックスだけは value ではなく checked を使う点に注意。
+     *
+     * ここに 1 行足すだけで、読み込み・保存・リセットのすべてに反映されます。
      */
-    const FIELDS = { file: "value", conflictAction: "value", alwaysSaveAs: "checked" };
+    const FIELDS = {
+        file: "value", conflictAction: "value", alwaysSaveAs: "checked", likeDownload: "checked",
+    };
 
     /**
      * 画面上の入力内容を、保存できるオブジェクトの形にまとめる。
      *
-     * @returns {{file: string, conflictAction: string, alwaysSaveAs: boolean}}
+     * @returns {{file: string, conflictAction: string, alwaysSaveAs: boolean, likeDownload: boolean}}
      */
     const readForm = () => Object.fromEntries(Object.entries(FIELDS).map(([id, prop]) => [id, $(id)[prop]]));
 

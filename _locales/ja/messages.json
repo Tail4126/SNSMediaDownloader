@@ -9,6 +9,7 @@
     "optOverwrite": { "message": "上書きする" },
     "optPrompt": { "message": "毎回確認する" },
     "labelAlwaysSaveAs": { "message": "常に保存ダイアログを表示する" },
+    "labelLikeDownload": { "message": "いいねしたときも同時にダウンロードする" },
     "btnReset": { "message": "既定値に戻す" },
     "statusSaved": { "message": "保存しました" },
     "warnBracket": { "message": "[ ] の対応が取れていません" },

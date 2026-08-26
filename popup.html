@@ -122,6 +122,16 @@
                 背景とグラデーションでスイッチ風に描き直しています（popup.css 参照）。
             -->
             <label class="checkbox-row"><span data-i18n="labelAlwaysSaveAs"></span><input class="switch" type="checkbox" id="alwaysSaveAs"></label>
+
+            <!--
+                いいね連動保存のスイッチ。既定はオフです。
+
+                押した覚えのないダウンロードが始まるのは驚きが大きいため、
+                使うと決めた人だけが、ここで明示的に有効にする形にしています。
+                オンにすると、メディアのある投稿にいいねを付けた時点で
+                その投稿のメディアがすべて保存されます（いいねを外したときは何も起きません）。
+            -->
+            <label class="checkbox-row"><span data-i18n="labelLikeDownload"></span><input class="switch" type="checkbox" id="likeDownload"></label>
         </div>
 
         <!-- ============ フッター：リセットボタン ＋ 保存表示 ============ -->

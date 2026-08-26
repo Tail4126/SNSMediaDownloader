@@ -34,6 +34,8 @@ Saving one image from a post is a right-click away. Everything past that gets te
   video, and `com.atproto.sync.getBlob` straight from the author's PDS for Bluesky.
 * 🎯 **Whole post or one item** — the action-bar button saves everything; a small button on each
   thumbnail saves just that one (it appears once a post has two or more).
+* ❤️ **Save when you like** — optionally, liking a post saves its media at the same time.
+  **Off by default**; turn it on in settings when you want it.
 * 🏷️ **Filename templates** — 24 placeholders, subfolders, conditional blocks, per-variable length
   limits, and a live preview of four sample posts while you type.
 * 🔁 **Failed transfers are retried** — up to three times, with a growing pause between attempts.
@@ -94,10 +96,28 @@ should confirm how many files were saved.
 | :--- | :--- | :--- |
 | **Main button** | In the action bar, next to like / bookmark. Shows a small count badge when the post has more than one media item. | Every media item in the post |
 | **Item button** | Top-right corner of each thumbnail. Only appears when the post has **two or more** items. | That one item |
+| **The like button** | The site's own like button — only when you switch this on in settings. | Every media item in the post |
 
 The result is reported as a toast in the corner of the screen — how many saved, and how many
 failed if any did. A file that fails is retried up to three times before it counts as failed, and a
 transfer that never completes is cleared away instead of leaving a partial file behind.
+
+### Saving when you like a post
+
+Turn on **Also download when you like a post** and the like button starts doing two jobs. The
+filename, the folder and the conflict behaviour are exactly the same as pressing the download
+button — this only changes *when* a save begins, never *what* it produces.
+
+It is **off by default**, and deliberately so: a download you didn't ask for is a worse surprise
+than one you have to click for. A few details worth knowing:
+
+* **Only liking triggers it.** Removing a like does nothing — the two states are different buttons
+  underneath, and only the "not yet liked" one is watched.
+* **Text-only posts are ignored silently.** No toast, no error. Nothing happens at all.
+* **The same post won't be saved twice.** Like → unlike → like again produces one set of files, not
+  two. The list of already-saved posts resets when you reload the page.
+* **The like itself is untouched.** The extension watches the click and gets out of the way; it
+  never cancels or delays the site's own handling.
 
 ### What it deliberately leaves alone
 
@@ -199,7 +219,8 @@ Click the toolbar icon (or open the extension's options page — it's the same s
 | **Filename** | `{site}/{user}-{id}-{datetime}-{kind}{n}.{ext}` | The template. Warnings appear below it for unbalanced `[ ]`, unknown placeholders, and a missing `{ext}`. |
 | **If a file exists** | Save with a number suffix | `uniquify` / `overwrite` / `prompt`, passed straight to the browser's download API. |
 | **Always show the save dialog** | OFF | Ask where to put every single file. |
-| **Restore defaults** | — | Puts all three back. |
+| **Also download when you like a post** | OFF | Liking a post saves its media too. See above. |
+| **Restore defaults** | — | Puts all four back. |
 
 There's no Save button — changes are written about 0.4 seconds after you stop typing, and a
 short *Saved* appears in the corner.
@@ -266,6 +287,22 @@ Item buttons need an ancestor that has a size and doesn't contain any *other* me
 — otherwise every button in a four-image grid would stack in the same corner. `anchorOf()` walks
 up from the thumbnail until it finds one, and gives up if it can't.
 
+### Watching the like button
+
+The like button is not one button but two: X swaps `data-testid="like"` for
+`data-testid="unlike"` once a post is liked, and Bluesky does the same with `likeBtn` and
+`unlikeBtn`. An adapter supplies only the first of the pair, which is what makes "like saves,
+unlike doesn't" fall out of the selector rather than out of extra state-tracking.
+
+The listener sits on `document` in the capture phase, so it still fires on sites that stop
+propagation further down. It reads the event and returns — no `preventDefault()`, no
+`stopPropagation()`. Liking remains entirely the site's business.
+
+What it deliberately *doesn't* do is watch the DOM for a post's like state flipping. That would
+also catch the keyboard shortcut, but both timelines recycle elements as you scroll, and a
+recycled node changing state looks identical to a real like. Downloads that start on their own are
+worse than downloads that occasionally don't, so only a real click counts.
+
 ### Saving, and what happens when it fails
 
 `downloads.download()` resolves as soon as the browser has *started* the transfer, which means its
@@ -291,6 +328,13 @@ halfway through.
 The post has no media the extension recognises — link-card previews, Tenor GIFs and quoted media
 are excluded on purpose. If the timeline was mid-render, scrolling away and back re-triggers the
 scan. Buttons are never injected into the full-screen lightbox.
+
+**Liking a post doesn't download anything.**
+Check the setting is on — it ships off. Then check the post actually has media the extension
+recognises: quoted media, link-card previews and Tenor GIFs are excluded here exactly as they are
+for the buttons. Note also that X's `L` keyboard shortcut isn't detected; only a click on the like
+button is. If you'd already liked and unliked that post in this tab, it counts as saved — reload
+the page to clear that.
 
 **On X: "Could not get the media URL. Please reload the page."**
 The GraphQL response for that post was never seen, and the DOM fallback found nothing usable —
@@ -360,14 +404,16 @@ Until that's tested on real hardware, claiming support would be guessing.
 No analytics, no telemetry, no identifiers, no ads, and no server belonging to the developer.
 
 The extension asks for two permissions — `downloads` to save files (and to follow each save to
-completion, so failures can be retried and cleared away), and `storage` to remember your three
+completion, so failures can be retried and cleared away), and `storage` to remember your four
 settings — plus access to `x.com`, `twitter.com`, `bsky.app`, `public.api.bsky.app` and
 `plc.directory`.
 
-It does make network requests, and it's worth being precise about which: **only when you press a
-save button**, and only to Bluesky's public API and the author's PDS. On X it makes no requests
-of its own at all — it reads responses the page had already received. Nothing about what you
-view or save is recorded or transmitted. Full details in [PRIVACY.md](PRIVACY.md).
+It does make network requests, and it's worth being precise about which: **only when a save is
+triggered** — by the download button, or by a like if you turned that on — and only to Bluesky's
+public API and the author's PDS. On X it makes no requests of its own at all — it reads responses
+the page had already received. Which posts you like is never recorded anywhere that outlives the
+tab, and nothing about what you view or save is transmitted. Full details in
+[PRIVACY.md](PRIVACY.md).
 
 ---
 
@@ -392,7 +438,7 @@ icons/
 ```
 
 `shared/core.js` holds everything that isn't site-specific. Each site supplies one adapter object
-with six keys and calls `SMDCore.start()`:
+— six required keys plus one optional — and calls `SMDCore.start()`:
 
 | Key | Role |
 | :--- | :--- |
@@ -402,10 +448,11 @@ with six keys and calls `SMDCore.start()`:
 | `readPost(root)` | `{ site, screenName, postId, name, text, time }` or `null` |
 | `getMedia(root, post)` | `[{ kind, url, ext, id, res }]`. May also fill in fields on `post` |
 | `actionBar(root)` | The element the main button is appended to |
+| `likeButton` | *Optional.* Selector for the like button, used by save-on-like. Must **not** match the un-like button. Omit it and only that feature switches off |
 
 ### Adding a site
 
-Write an adapter with those six keys, add its content-script entry (and any `host_permissions`)
+Write an adapter with those keys, add its content-script entry (and any `host_permissions`)
 to `manifest.json`, add the site to the `SITE` map in `shared/template.js` so `{site}` renders
 sensibly, and add an accent-colour block to `content.css`. `shared/core.js` shouldn't need to
 change.

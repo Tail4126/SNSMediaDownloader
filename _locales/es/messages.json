@@ -9,6 +9,7 @@
     "optOverwrite": { "message": "Sobrescribir" },
     "optPrompt": { "message": "Preguntar siempre" },
     "labelAlwaysSaveAs": { "message": "Mostrar siempre el diálogo de guardado" },
+    "labelLikeDownload": { "message": "Descargar también al dar me gusta" },
     "btnReset": { "message": "Restaurar valores predeterminados" },
     "statusSaved": { "message": "Guardado" },
     "warnBracket": { "message": "Los [ ] no están equilibrados" },
