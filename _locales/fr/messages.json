@@ -9,6 +9,7 @@
     "optOverwrite": { "message": "Remplacer" },
     "optPrompt": { "message": "Demander à chaque fois" },
     "labelAlwaysSaveAs": { "message": "Toujours afficher la boîte de dialogue d'enregistrement" },
+    "labelLikeDownload": { "message": "Télécharger aussi lors d’un « J’aime »" },
     "btnReset": { "message": "Rétablir les valeurs par défaut" },
     "statusSaved": { "message": "Enregistré" },
     "warnBracket": { "message": "Les [ ] ne sont pas équilibrés" },

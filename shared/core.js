@@ -4,10 +4,10 @@
  * ==================================================================
  * サイトに依存しない共通処理をまとめたモジュール（globalThis.SMDCore）。
  *
- * X 用・Bluesky 用のスクリプトは「アダプタ」と呼ばれる 6 個のキーを持つ
- * オブジェクトを 1 つ作って SMDCore.start() に渡すだけで済みます。
- * ボタンの描画、クリック処理、ファイル名の組み立て、通知の表示などは
- * すべてこのファイルが引き受けます。
+ * X 用・Bluesky 用のスクリプトは「アダプタ」と呼ばれるオブジェクトを 1 つ作って
+ * SMDCore.start() に渡すだけで済みます（必須 6 キー ＋ 任意 1 キー）。
+ * ボタンの描画、クリック処理、ファイル名の組み立て、通知の表示、
+ * 「いいね」と同時に保存する機能などは、すべてこのファイルが引き受けます。
  * ==================================================================
  */
 
@@ -43,6 +43,9 @@ globalThis.SMDCore = (() => {
      * @property {(root: Element) => PostInfo|null} readPost 投稿情報を読み取る
      * @property {(root: Element, post: PostInfo) => Promise<MediaItem[]>} getMedia メディア一覧を返す
      * @property {(root: Element) => Element|null} actionBar メインボタンを置く要素を返す
+     * @property {string} [likeButton] 「いいね」ボタンを選ぶ CSS セレクタ（任意）
+     *   いいね連動保存に使います。「いいねを取り消す」ボタンには一致しない
+     *   セレクタを渡してください。省略したサイトでは、この機能が無効になります。
      */
 
     // ボタンに表示する下向き矢印アイコン（SVG）。
@@ -92,12 +95,25 @@ globalThis.SMDCore = (() => {
      * @param {SiteAdapter} adapter - サイトごとのアダプタ
      * @param {Element} root - 投稿 1 件のコンテナ要素
      * @param {number|null} only - null なら全件、数値ならその番号（0 始まり）だけ保存
+     * @param {boolean} [quiet=false] - true なら「保存するものが無い」場合のトーストを省く
      * @returns {Promise<void>}
      */
-    const save = async (adapter, root, only) => {
+    const save = async (adapter, root, only, quiet = false) => {
+        /**
+         * 「保存するものが無い」系のエラーを通知する。quiet が true なら黙って見送ります。
+         *
+         * いいね連動の自動保存では、メディアの無い投稿にいいねを押すたびに
+         * エラーが出ると邪魔になるためです。ボタンを自分で押したときは
+         * 何も起きない理由が分かるよう、これまでどおり表示します。
+         *
+         * @param {string} key - 表示するメッセージのキー
+         * @returns {void}
+         */
+        const nothing = (key) => { if (!quiet) toast(SMD.t(key), true); };
+
         // 1. 投稿情報（ユーザー名・投稿 ID など）を読む
         const post = adapter.readPost(root);
-        if (!post) return toast(SMD.t("toastNoPost"), true);
+        if (!post) return nothing("toastNoPost");
 
         // 2. メディア一覧を取得。通信を伴うことがあるので失敗したら空配列にします。
         const all = (await adapter.getMedia(root, post).catch(() => [])) ?? [];
@@ -105,7 +121,7 @@ globalThis.SMDCore = (() => {
         // 3. 全件保存か、指定された 1 件だけ保存かを決める。
         //    slice(only, only + 1) は「only 番目の要素だけを含む配列」を作る書き方です。
         const picked = only === null ? all : all.slice(only, only + 1);
-        if (picked.length === 0) return toast(SMD.t("toastNoMedia"), true);
+        if (picked.length === 0) return nothing("toastNoMedia");
 
         // 4. 保存された設定を読む。未保存の項目は DEFAULTS で埋めます。
         const settings = { ...SMD.DEFAULTS, ...await api.storage.sync.get(SMD.DEFAULTS).catch(() => ({})) };
@@ -245,6 +261,87 @@ globalThis.SMDCore = (() => {
         });
     };
 
+    // ================================================================
+    // いいね連動保存
+    // ================================================================
+
+    /**
+     * 「いいね」と同時に保存するかどうか。既定はオフです。
+     * storage を読み終えるまでの間も動けるよう、既定値で初期化しておきます。
+     */
+    let likeDownload = SMD.DEFAULTS.likeDownload;
+
+    /**
+     * いいね連動ですでに保存した投稿を覚えておく集合。キーは "サイト:投稿ID" です。
+     *
+     * いいね → 取り消し → もう一度いいね、と操作したときに同じファイルが
+     * 二重に増えるのを防ぎます。取りこぼしよりも二重保存のほうが困るという判断で、
+     * 保存を始める前に記録しています（失敗しても再挑戦はしません）。
+     * ページを再読み込みすると空に戻ります。
+     * @type {Set<string>}
+     */
+    const likeSaved = new Set();
+
+    /**
+     * 「いいね」ボタンのクリックを見張り、設定がオンなら保存も行う。
+     *
+     * いいね自体の処理はサイト側に任せます。ここでは preventDefault も
+     * stopPropagation も呼びません。あくまで「押されたことを知る」だけです。
+     *
+     * @param {SiteAdapter} adapter - サイトごとのアダプタ
+     * @returns {void}
+     */
+    const watchLikes = (adapter) => {
+        // セレクタを持たないアダプタでは、この機能ごと無効になります。
+        if (!adapter.likeButton) return;
+
+        // 現在の設定を読み、以降は変更を監視して追い掛けます。
+        // クリックのたびに storage を読むより速く、設定画面での変更もすぐ反映されます。
+        api.storage.sync.get({ likeDownload: SMD.DEFAULTS.likeDownload })
+            .then((stored) => { likeDownload = Boolean(stored.likeDownload); })
+            .catch(() => {}); // 読めなければ既定値（オフ）のままで構いません
+
+        api.storage.onChanged.addListener((changes, area) => {
+            if (area === "sync" && changes.likeDownload) {
+                likeDownload = Boolean(changes.likeDownload.newValue);
+            }
+        });
+
+        // 第 3 引数の true はキャプチャフェーズでの受け取り指定です。
+        // サイト側が途中でイベントを止めても、こちらへは先に届きます。
+        document.addEventListener("click", (e) => {
+            if (!likeDownload) return; // オフなら以降の判定もしません
+
+            // 「いいねを取り消す」ボタンは別のセレクタなので、ここには一致しません。
+            // つまり、いいねを付けたときだけ保存され、外したときは何も起きません。
+            const hit = e.target?.closest?.(adapter.likeButton);
+            if (!hit) return;
+
+            const root = hit.closest(adapter.postRoot);
+            if (!root) return;
+
+            // メディアの無い投稿は静かに見送ります。文字だけの投稿にいいねを
+            // 押すたびに何か起きるようでは、常用に耐えないためです。
+            if (adapter.mediaContainers(root).length === 0) return;
+
+            const post = adapter.readPost(root);
+            if (!post) return;
+
+            const key = `${post.site}:${post.postId}`;
+            if (likeSaved.has(key)) return;
+
+            likeSaved.add(key);
+
+            // 際限なく増えないよう上限 500 件。Set は挿入順を保つので、
+            // keys().next().value は「一番古く追加されたキー」になります。
+            while (likeSaved.size > 500) likeSaved.delete(likeSaved.keys().next().value);
+
+            // await しません。ここで待つと、いいねの反映が保存の分だけ遅れて見えるためです。
+            // 第 4 引数の true で「保存するものが無い」場合のトーストを省きます。
+            save(adapter, root, null, true).catch(() => {});
+        }, true);
+    };
+
     /**
      * 拡張機能の動作を開始する。各サイトのスクリプトはこの関数を 1 回呼ぶだけです。
      *
@@ -255,6 +352,9 @@ globalThis.SMDCore = (() => {
         // <html data-smd-site="x"> のような属性を付けると、
         // CSS 側でサイトごとのアクセント色を切り替えられます。
         document.documentElement.dataset.smdSite = adapter.site;
+
+        // いいね連動保存の待ち受けを始めます（設定がオフの間は何もしません）。
+        watchLikes(adapter);
 
         /** ページ内の全投稿を走査してボタンを差し込む */
         const scan = () => {

@@ -186,5 +186,14 @@
         actionBar: (root) => root.querySelector(
             'div[role="group"]:has([data-testid="reply"], [data-testid="like"], [data-testid="unlike"])'
         ),
+
+        /**
+         * いいね連動保存の目印。
+         *
+         * X は状態で testid を使い分けており、"like" は「まだ押していない」ボタン、
+         * "unlike" は「すでに押してある」ボタンです。ここで "like" だけを指定しているため、
+         * いいねを付けたときにだけ保存が走り、外したときは何も起きません。
+         */
+        likeButton: '[data-testid="like"]',
     });
 })();

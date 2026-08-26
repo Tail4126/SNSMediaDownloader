@@ -9,6 +9,7 @@
     "optOverwrite": { "message": "Überschreiben" },
     "optPrompt": { "message": "Jedes Mal fragen" },
     "labelAlwaysSaveAs": { "message": "Speicherdialog immer anzeigen" },
+    "labelLikeDownload": { "message": "Beim Liken ebenfalls herunterladen" },
     "btnReset": { "message": "Standardwerte wiederherstellen" },
     "statusSaved": { "message": "Gespeichert" },
     "warnBracket": { "message": "[ ] sind nicht ausgeglichen" },

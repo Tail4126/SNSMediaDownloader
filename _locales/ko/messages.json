@@ -9,6 +9,7 @@
     "optOverwrite": { "message": "덮어쓰기" },
     "optPrompt": { "message": "매번 확인" },
     "labelAlwaysSaveAs": { "message": "항상 저장 대화상자 표시" },
+    "labelLikeDownload": { "message": "좋아요를 누를 때도 함께 다운로드" },
     "btnReset": { "message": "기본값으로 되돌리기" },
     "statusSaved": { "message": "저장했습니다" },
     "warnBracket": { "message": "[ ]의 짝이 맞지 않습니다" },

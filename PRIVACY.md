@@ -14,7 +14,7 @@
 | :--- | :--- |
 | Does it collect personal data? / 個人情報を収集しますか？ | **No / いいえ** |
 | Is there a developer-owned server? / 開発者のサーバーはありますか？ | **No — none exists / ありません** |
-| Does it make network requests? / 外部と通信しますか？ | Yes, but only when you press save, and only to Bluesky's public API and the author's PDS / はい。ただし保存ボタンを押したときだけ、Bluesky の公開 API と投稿者の PDS に対してのみ（§3） |
+| Does it make network requests? / 外部と通信しますか？ | Yes, but only when a save is triggered — by the download button, or by a like if you enabled that — and only to Bluesky's public API and the author's PDS / はい。ただし保存が始まったときだけ（ダウンロードボタン、または有効にした場合はいいね）、Bluesky の公開 API と投稿者の PDS に対してのみ（§3） |
 | Does it use analytics or telemetry? / 解析・テレメトリはありますか？ | **No / ありません** |
 | Does it record what you view or save? / 閲覧・保存の履歴を記録しますか？ | **No / いいえ** |
 | Where are settings stored? / 設定の保存先は？ | `storage.sync` — your browser profile / ブラウザのプロファイル内 |
@@ -46,22 +46,26 @@ to be asked for. §3 sets out exactly which hosts are contacted, when, and why.
 
 #### 1.1 Saved to storage
 
-Three settings, and nothing else:
+Four settings, and nothing else:
 
 | Item | Example | Why |
 | :--- | :--- | :--- |
 | Filename template | `{site}/{user}-{id}-{datetime}-{kind}{n}.{ext}` | So your files are named the way you asked |
 | Conflict behaviour | `uniquify` / `overwrite` / `prompt` | Passed to the browser's download API |
 | Always show the save dialog | `true` / `false` | Passed to the browser's download API |
+| Download when you like a post | `true` / `false` | Whether liking a post also starts a save. Defaults to `false` |
 
 These live in `chrome.storage.sync` / `browser.storage.sync`, which means **your browser syncs
 them to your other devices** if you're signed in to it. That's a deliberate convenience — a
-filename template you tuned on one machine is worth having on the next. It also means those three
+filename template you tuned on one machine is worth having on the next. It also means those four
 values pass through your browser vendor's sync service (Google or Mozilla), under their privacy
 policy, exactly as your bookmarks do.
 
 Nothing else is stored. No history of what you downloaded, no list of posts, no accounts you
-viewed, no URLs, no timestamps of your activity.
+viewed, no URLs, no timestamps of your activity. In particular, **which posts you liked is not
+recorded anywhere that outlives the tab.** The save-on-like feature keeps a set of post IDs in
+page memory purely to avoid saving the same post twice, and that set is gone the moment you
+reload or close the tab.
 
 #### 1.2 Only ever in memory (never saved)
 
@@ -95,7 +99,7 @@ Two permissions:
 | Permission | Why |
 | :--- | :--- |
 | **`downloads`** | To start the downloads you asked for, follow each one to completion, and retry or clear away the ones that fail. |
-| **`storage`** | To save and load the three settings above. |
+| **`storage`** | To save and load the four settings above. |
 
 Content scripts run on these sites, and nowhere else:
 
@@ -107,6 +111,11 @@ On those pages the Extension looks at the post structure — the media elements,
 author link, the post text and timestamp — in order to place a button and build a filename. It does
 not touch form inputs, cookies, credentials, direct messages, or account settings, and it has no
 interest in pages that aren't posts.
+
+When **Also download when you like a post** is switched on, the Extension additionally listens for
+clicks on the site's like button so it knows when to start a save. It only observes: it never
+clicks, cancels, or alters a like, and it cannot see likes you made on another device or before it
+was installed. With the setting off — which is how it ships — the listener does nothing at all.
 
 **One point deserves to be spelled out.** On X, `sites/x/interceptor.js` runs in the page's own
 JavaScript world and wraps `fetch` and `XMLHttpRequest`, so it observes the *bodies* of responses
@@ -130,7 +139,8 @@ arbitrary domains, and that trade isn't worth making by default.
 ### 3. Network requests
 
 The Extension itself makes requests to exactly three kinds of host, all of them Bluesky
-infrastructure, and all of them **only after you press a save button**:
+infrastructure, and all of them **only after a save has been triggered** — by pressing a download
+button, or by liking a post if you switched that on:
 
 | Host | When | What is sent | Why |
 | :--- | :--- | :--- | :--- |
@@ -171,7 +181,7 @@ governed by their own privacy policies, as is your browser vendor's handling of 
 
 ### 5. Keeping and deleting data
 
-Your three settings stay in your browser profile until you remove them. You can:
+Your four settings stay in your browser profile until you remove them. You can:
 
 * hit **Restore defaults** in the settings screen, or
 * uninstall the Extension, which removes its stored settings along with it.
@@ -229,22 +239,25 @@ Bluesky では、まともなファイル名を作るためのメタ情報を問
 
 #### 1.1 ストレージに保存するもの
 
-設定 3 つだけです。それ以外はありません。
+設定 4 つだけです。それ以外はありません。
 
 | 内容 | 例 | 理由 |
 | :--- | :--- | :--- |
 | ファイル名テンプレート | `{site}/{user}-{id}-{datetime}-{kind}{n}.{ext}` | 指定どおりのファイル名で保存するため |
 | 同名時の動作 | `uniquify` / `overwrite` / `prompt` | ブラウザのダウンロード API へ渡すため |
 | 常に保存ダイアログを表示する | `true` / `false` | ブラウザのダウンロード API へ渡すため |
+| いいね時にダウンロードする | `true` / `false` | いいねで保存を始めるかどうか。既定は `false` |
 
 保存先は `chrome.storage.sync` / `browser.storage.sync` です。つまり、ブラウザにログインしていれば
-**この 3 つは他の端末にも同期されます**。これは意図した利便性です。片方の端末で調整した
+**この 4 つは他の端末にも同期されます**。これは意図した利便性です。片方の端末で調整した
 テンプレートを、もう片方でも使えたほうがよいからです。
-同時にこれは、その 3 つの値がブックマークとまったく同じように、ブラウザベンダー
+同時にこれは、その 4 つの値がブックマークとまったく同じように、ブラウザベンダー
 （Google または Mozilla）の同期サービスを経由し、そのプライバシーポリシーの下に置かれることも意味します。
 
 これ以外は何も保存しません。ダウンロード履歴も、投稿の一覧も、閲覧したアカウントも、
-URL も、操作した日時も保存しません。
+URL も、操作した日時も保存しません。とりわけ、**どの投稿にいいねしたかは、タブより長く残る形では
+どこにも記録されません**。いいね連動保存が投稿 ID の集合を持つのは、同じ投稿を二重に保存しない
+ためだけであり、その集合はページの再読み込みやタブを閉じた時点で消えます。
 
 #### 1.2 メモリ上だけで扱うもの（保存しない）
 
@@ -279,7 +292,7 @@ X 側のキャッシュは上限 2000 件で古い順に破棄され、ページ
 | 権限 | 理由 |
 | :--- | :--- |
 | **`downloads`** | 指示されたダウンロードを開始し、完了まで追跡し、失敗したものを再試行・後片付けするため |
-| **`storage`** | 上記 3 つの設定を保存・読み込みするため |
+| **`storage`** | 上記 4 つの設定を保存・読み込みするため |
 
 コンテンツスクリプトが動くのは以下のサイトだけです。
 
@@ -291,6 +304,11 @@ https://x.com/*        https://twitter.com/*        https://bsky.app/*
 本文、投稿日時）だけです。ボタンを置き、ファイル名を組み立てるために必要な範囲に限られます。
 フォーム入力、Cookie、認証情報、ダイレクトメッセージ、アカウント設定には触れませんし、
 投稿ではないページには関心がありません。
+
+**「いいねしたときも同時にダウンロードする」をオンにした場合**は、保存を始めるきっかけを
+知るために、サイトのいいねボタンへのクリックも見ます。見るだけです。いいねを代わりに押したり、
+取り消したり、書き換えたりはしません。他の端末で押したいいねや、導入前のいいねも分かりません。
+設定がオフの間（出荷時の状態）は、この待ち受けは何もしません。
 
 **ひとつ、はっきり書いておくべき点があります。** X では `sites/x/interceptor.js` が
 ページ自身の JavaScript の世界で動き、`fetch` と `XMLHttpRequest` を包みます。
@@ -316,7 +334,8 @@ https://x.com/*        https://twitter.com/*        https://bsky.app/*
 ### 3. 外部通信
 
 本拡張機能自身が接続するのは、次の 3 種類のホストだけです。いずれも Bluesky の基盤であり、
-いずれも**保存ボタンを押した後にのみ**発生します。
+いずれも**保存が始まった後にのみ**発生します（ダウンロードボタンを押したとき、
+または有効にしている場合はいいねを押したとき）。
 
 | 接続先 | タイミング | 送る内容 | 理由 |
 | :--- | :--- | :--- | :--- |
@@ -358,7 +377,7 @@ https://x.com/*        https://twitter.com/*        https://bsky.app/*
 
 ### 5. データの保持と削除
 
-設定 3 つは、消すまでブラウザのプロファイル内に残ります。消し方は 2 通りです。
+設定 4 つは、消すまでブラウザのプロファイル内に残ります。消し方は 2 通りです。
 
 * 設定画面の **「既定値に戻す」** で初期状態に戻す
 * 拡張機能をアンインストールする（保存された設定ごと消えます）

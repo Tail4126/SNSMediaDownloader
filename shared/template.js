@@ -73,12 +73,17 @@ globalThis.SMD = (() => {
     /**
      * 設定の初期値。popup.js の「既定値に戻す」ボタンや、
      * 保存された設定が無いときの穴埋めにも使われます。
-     * @type {{ file: string, conflictAction: string, alwaysSaveAs: boolean }}
+     * @type {{ file: string, conflictAction: string, alwaysSaveAs: boolean, likeDownload: boolean }}
      */
     const DEFAULTS = {
         file: "{site}/{user}-{id}-{datetime}-{kind}{n}.{ext}",
         conflictAction: "uniquify", // 同名ファイルがあるときは連番を付けて保存
         alwaysSaveAs: false,        // 毎回「名前を付けて保存」ダイアログを出すか
+
+        // 「いいね」と同時に保存するか。既定はオフです。
+        // 押した覚えのないダウンロードが始まるのは驚きが大きいため、
+        // 使うと決めた人だけが設定画面で明示的に有効にする形にしています。
+        likeDownload: false,
     };
 
     /**

@@ -256,6 +256,12 @@ Firefox で動作確認したあとの `manifest.json` には *Firefox 用の内
 `site` / `postRoot` / `mediaContainers()` / `readPost()` / `getMedia()` / `actionBar()` を持つ
 アダプタを 1 つ書き、`SMDCore.start()` に渡してください。あわせて次の 3 つを行います。
 
+いいね連動保存に対応させる場合は、任意キー `likeButton` も足してください。
+「まだいいねしていない」状態のボタンだけに一致するセレクタである必要があります
+（X の `like` / `unlike`、Bluesky の `likeBtn` / `unlikeBtn` のように、
+状態で別のセレクタになっているのが普通です）。省略した場合、
+そのサイトではいいね連動保存だけが無効になり、他の動作には影響しません。
+
 * `manifest.json` にコンテンツスクリプトの項目（必要なら `host_permissions` も）を追加する
 * `shared/template.js` の `SITE` 表に追記し、`{site}` が短い文字列になるようにする
 * `content.css` に `[data-smd-site="…"]` を鍵とするアクセント色のブロックを足す
@@ -289,7 +295,7 @@ Bluesky のアダプタは、これを使って本文と投稿日時を API の�
 | 変更する対象 | 一緒に更新するもの |
 | :--- | :--- |
 | テンプレート変数 | `shared/template.js` の `buildVars()` ・ `popup.js` の `TOKENS` ・ `_locales/*/messages.json` 9 言語 ・ README 英日の変数表 ・ `TIPS.md` |
-| 設定項目、その既定値 | `shared/template.js` の `DEFAULTS` ・ `popup.html` の行の記述 ・ `popup.js` の `FIELDS` ・ `_locales/*/messages.json` 9 言語 ・ README 英日の設定表 |
+| 設定項目、その既定値 | `shared/template.js` の `DEFAULTS` ・ `popup.html` の行の記述 ・ `popup.js` の `FIELDS` ・ `_locales/*/messages.json` 9 言語 ・ README 英日の設定表 ・ `PRIVACY.md` §1.1 の保存内容の表（英日）|
 | UI の文言、トーストの文言 | `_locales/*/messages.json` 9 言語（キーの集合は英語版が基準） |
 | アダプタのセレクタ | 他は不要ですが、どのページ状態で確認したかをプルリクエストに書いてください（タイムライン・スレッド・パーマリンク・引用投稿） |
 | サイトの追加 | `manifest.json` ・ `shared/template.js` の `SITE` ・ `content.css` のアクセント色 ・ README 英日 ・ `.github/ISSUE_TEMPLATE/bug_report.yml` のサイト選択肢 |

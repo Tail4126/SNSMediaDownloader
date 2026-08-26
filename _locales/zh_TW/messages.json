@@ -9,6 +9,7 @@
     "optOverwrite": { "message": "覆寫" },
     "optPrompt": { "message": "每次詢問" },
     "labelAlwaysSaveAs": { "message": "一律顯示儲存對話框" },
+    "labelLikeDownload": { "message": "按讚時同時下載" },
     "btnReset": { "message": "還原預設值" },
     "statusSaved": { "message": "已儲存" },
     "warnBracket": { "message": "[ ] 未成對" },

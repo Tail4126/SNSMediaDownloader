@@ -260,5 +260,14 @@
         readPost,
         getMedia,
         actionBar,
+
+        /**
+         * いいね連動保存の目印。
+         *
+         * Bluesky も X と同じく状態で testid を使い分けており、"likeBtn" は
+         * 「まだ押していない」ボタン、"unlikeBtn" は「すでに押してある」ボタンです。
+         * ここで "likeBtn" だけを指定しているため、いいねを付けたときにだけ保存が走ります。
+         */
+        likeButton: '[data-testid="likeBtn"]',
     });
 })();
