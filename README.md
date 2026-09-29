@@ -36,6 +36,9 @@ Saving one image from a post is a right-click away. Everything past that gets te
   thumbnail saves just that one (it appears once a post has two or more).
 * ❤️ **Save when you like** — optionally, liking a post saves its media at the same time.
   **Off by default**; turn it on in settings when you want it.
+* 📊 **Progress and saved state at a glance** — a counter in the bottom-left corner shows
+  *Pending* and *Done* (and *Failed*, if anything failed). Buttons for media you've saved turn into
+  a green check mark, and stay that way across page changes and reloads until you close the browser.
 * 🏷️ **Filename templates** — 24 placeholders, subfolders, conditional blocks, per-variable length
   limits, and a live preview of four sample posts while you type.
 * 🔁 **Failed transfers are retried** — up to three times, with a growing pause between attempts.
@@ -85,8 +88,8 @@ There's no build step. The repository *is* the extension — download it and loa
 ### ✅ Check that it works
 
 Open any post with an image on [x.com](https://x.com/) or [bsky.app](https://bsky.app/).
-A ⬇️ button should appear in the row with reply / repost / like. Click it, and a small toast
-should confirm how many files were saved.
+A ⬇️ button should appear in the row with reply / repost / like. Click it, and a counter appears
+in the bottom-left corner; once the save finishes, the button turns into a green check mark.
 
 ---
 
@@ -98,9 +101,46 @@ should confirm how many files were saved.
 | **Item button** | Top-right corner of each thumbnail. Only appears when the post has **two or more** items. | That one item |
 | **The like button** | The site's own like button — only when you switch this on in settings. | Every media item in the post |
 
-The result is reported as a toast in the corner of the screen — how many saved, and how many
-failed if any did. A file that fails is retried up to three times before it counts as failed, and a
-transfer that never completes is cleared away instead of leaving a partial file behind.
+### The download counter
+
+Progress is shown by a counter in the bottom-left corner of the page.
+
+| Label | What it counts |
+| :--- | :--- |
+| **Pending** | Files waiting their turn, plus the one being transferred |
+| **Done** | Files that were saved |
+| **Failed** | Files that still failed after retrying — only shown when there's at least one |
+
+It counts files, not posts, and it's the total across every open tab. Saves started by a button and
+saves started by a like are counted the same way. **Five seconds** after *Pending* reaches zero the
+counter fades out, and *Done* and *Failed* reset to zero. If another save starts within those five
+seconds, the counter stays up and keeps its numbers.
+
+Clicks pass straight through the counter, so whatever the site has underneath it (the account
+switcher, for instance) still works. On narrow, phone-sized layouts it sits above the bottom
+navigation bar.
+
+Failures are also reported with a toast — how many saved and how many failed, or just how many
+failed if nothing made it. A fully successful save shows no toast; the counter already says so. A
+file that fails is retried up to three times before it counts as failed, and a transfer that never
+completes is cleared away instead of leaving a partial file behind.
+
+### Saved-state buttons
+
+Once a media item has been saved, its buttons change:
+
+* **Item buttons** turn into a green check mark and stay visible without hovering, so you can see
+  at a glance which images in a set you've already saved.
+* **The main button** turns into a check mark when every item in the post is saved. When only some
+  are, its count badge reads like `2/4`.
+
+A checked button still works — press it and the file is saved again. The record is kept per post ID
+and item number, so the same post shows the same state when it turns up as a repost or in another
+tab, and it survives navigating around and reloading.
+
+The record is **cleared when you close the browser**, and also when the extension is updated or
+reloaded. Saves made in a private window are kept separately from normal windows, and are cleared
+as soon as the last private window closes.
 
 ### Saving when you like a post
 
@@ -114,8 +154,11 @@ than one you have to click for. A few details worth knowing:
 * **Only liking triggers it.** Removing a like does nothing — the two states are different buttons
   underneath, and only the "not yet liked" one is watched.
 * **Text-only posts are ignored silently.** No toast, no error. Nothing happens at all.
-* **The same post won't be saved twice.** Like → unlike → like again produces one set of files, not
-  two. The list of already-saved posts resets when you reload the page.
+* **A like never re-saves something already saved.** Like → unlike → like again produces one set
+  of files, not two. The same goes for a post you saved with a button: if every item is saved, a
+  like does nothing; if only some are, it saves the rest. This uses the same record as the
+  saved-state buttons above, so it lasts until you close the browser. (Buttons, by contrast, will
+  save again as often as you like.)
 * **The like itself is untouched.** The extension watches the click and gets out of the way; it
   never cancels or delays the site's own handling.
 
@@ -201,12 +244,22 @@ dangling hyphen behind.
 
 * Characters that filenames can't contain (`\ / : * ? " < > |` and control characters) are stripped
   from **values**, so a display name full of emoji and slashes can't break out into a folder path.
+* The same characters are also stripped if you typed them into the template itself (a literal `:`
+  or `?`, say), so the browser never rejects the name.
 * Runs of whitespace collapse to a single space, and leading/trailing spaces are trimmed.
-* Length limits count *characters*, not UTF-16 units, so emoji don't get cut in half.
+* Length limits (`:20` and so on) count *visible characters*, so even joined emoji like `👨‍👩‍👧`
+  are never cut in half.
 * Each path segment has leading and trailing dots and spaces removed, and empty segments are
   dropped — which also means `..` can never survive into the path.
-* The filename stem is capped at 100 characters; the extension is added afterwards.
-* If a template renders to nothing at all, the file is saved as `download`.
+* Each segment — folder or file name — is capped at **150 bytes** of UTF-8: roughly 150 Latin
+  characters, or about 50 Japanese ones. File names are trimmed from the stem so the extension
+  survives. Most file systems allow 255 bytes; the rest is headroom for the temporary suffix the
+  browser adds while downloading.
+* A segment that turns out to be a reserved Windows name (`CON`, `NUL`, `COM1` …) gets a `_` prefix.
+* If the file-name part renders to nothing, the file is saved as `download`.
+* If the template itself is blank (or only spaces), the default template is used instead.
+* A name that isn't in the placeholder list, such as `{toString}`, renders as nothing (and the
+  settings screen warns about it).
 
 ---
 
@@ -217,23 +270,27 @@ Click the toolbar icon (or open the extension's options page — it's the same s
 | Setting | Default | What it does |
 | :--- | :--- | :--- |
 | **Filename** | `{site}/{user}-{id}-{datetime}-{kind}{n}.{ext}` | The template. Warnings appear below it for unbalanced `[ ]`, unknown placeholders, and a missing `{ext}`. |
-| **If a file exists** | Save with a number suffix | `uniquify` / `overwrite` / `prompt`, passed straight to the browser's download API. |
+| **If a file exists** | Save with a number suffix | `uniquify` / `overwrite` / `prompt`, passed straight to the browser's download API. Firefox doesn't support `prompt` (*Ask every time*), so it isn't offered there. |
 | **Always show the save dialog** | OFF | Ask where to put every single file. |
 | **Also download when you like a post** | OFF | Liking a post saves its media too. See above. |
 | **Restore defaults** | — | Puts all four back. |
 
-There's no Save button — changes are written about 0.4 seconds after you stop typing, and a
-short *Saved* appears in the corner.
+There's no Save button. Switches and the drop-down are saved the moment you change them; the
+filename is saved about 0.4 seconds after you stop typing (or as soon as you leave the field or
+close the popup). A short *Saved* appears in the corner.
 
 Settings live in `storage.sync`, so they follow your browser profile to your other devices if
-you're signed in. Nothing about the posts you download is stored.
+you're signed in. The record behind the saved-state buttons — post IDs and which items of each
+were saved — is kept separately in `storage.session`: it isn't synced, and it's gone when you close
+the browser.
 
 ---
 
 ## 💡 How it works
 
 Both sites go through the same core (`shared/core.js`): find posts, inject buttons, build
-filenames, hand a list of `{url, filename}` pairs to the background script, show a toast.
+filenames, hand a list of `{url, filename}` pairs to the background script, update the counter
+and the buttons' saved state, and show a toast if something failed.
 Everything site-specific lives in an adapter. The two adapters solve very different problems.
 
 ### X — reading the response the page already received
@@ -248,10 +305,20 @@ which is the only place `window.fetch` can be wrapped — and monkey-patches `fe
 can only be read once, and X needs its copy), walks the JSON recursively, and picks out every
 `rest_id` / `id_str` that has an `extended_entities.media` array next to it.
 
+X receives a great many API responses, so all of this is extra work on top of rendering the page.
+The response is therefore read as text first, and anything that doesn't contain `"media_url_https"`
+— badge counts, settings and the like — is skipped without ever being parsed as JSON. Parsing and
+walking run through `requestIdleCallback`, when the browser has nothing better to do (within a second
+at most, well before anyone presses a download button). The one exception is an XHR whose
+`responseType` is `"json"`: the browser has already parsed it, and X may modify that object
+afterwards, so it's walked on the spot — which is cheap, since there's nothing left to parse.
+
 Images become `pbs.twimg.com/media/…?format=…&name=orig`. Videos get their `variants` filtered
 down to `video/mp4` and sorted by bitrate, keeping the highest. The result is posted to the
-content script with `postMessage`, which checks the origin and re-validates that every URL is
-`https://` before caching it. The cache is keyed by post ID *and* by video ID — the latter can be
+content script with `postMessage`, which validates it before caching. Because scripts on the page
+can post messages of the same shape, only `https` URLs on `pbs.twimg.com` / `video.twimg.com` and
+image / MP4 extensions are accepted. Media that couldn't be converted stays in the list as `null`,
+so item numbers keep lining up with what's on screen. The cache is keyed by post ID *and* by video ID — the latter can be
 recovered from a thumbnail's `poster` attribute when the post ID isn't reachable.
 
 If the interceptor missed the response — you opened the page on a permalink, or the entry was
@@ -278,14 +345,35 @@ are enough to build a working download URL — you just lose the nicer metadata.
 
 ### Injecting the buttons
 
-A `MutationObserver` watches the whole document, debounced to 200 ms, and rescans for posts
-after each burst of changes. Both sites replace their timelines continuously as you scroll, so
-there's no load event to hook. Injection is idempotent: a post that already has a button is
-skipped.
+Both sites replace their timelines continuously as you scroll, so there's no load event to hook.
+A `MutationObserver` watches the whole document instead — but since the DOM never stops changing on
+either site, it never rescans the page. Only **the posts that changed** are looked at again:
+
+* **Only relevant changes mark a post.** A post is marked when an element containing posts is
+  added; when, inside a post, an element the buttons depend on (the adapter's `watch`: media, links
+  to the post, action-bar buttons) is added or removed; or when an image's `src`, a video's
+  `poster` or a link's `href` changes. A playing video's timestamp, or the extension's own buttons
+  being added, don't mark anything.
+* **Marked posts are handled together on the next animation frame**, via `requestAnimationFrame`,
+  so new buttons make it into the next paint.
+* **Reading and writing happen in separate passes.** Reading an element's size forces the browser to
+  lay out the page, so interleaving reads and writes would cost one layout per post. Every marked
+  post is examined first; only then is anything written. Sizes are read only when looking for a
+  place to put the button of a newly found media item.
+* **Buttons are remembered**, in `WeakMap`s keyed by the media item and the post, so the DOM isn't
+  searched again. Those entries disappear with their elements, so nothing accumulates.
+* **Clicks are caught in one place**: a single capture-phase listener on `document` rather than one
+  per button. It runs before anything on the page, so the site's own handlers (opening the post and
+  so on) never see the click.
+
+Injection is idempotent: a post that already has buttons gets no new ones, only a refresh of their
+saved state — and a button whose look hasn't changed isn't touched at all. An exception on one post
+doesn't stop the others.
 
 Item buttons need an ancestor that has a size and doesn't contain any *other* media in the post
 — otherwise every button in a four-image grid would stack in the same corner. `anchorOf()` walks
-up from the thumbnail until it finds one, and gives up if it can't.
+up from the thumbnail until it finds one. If nothing has a size yet — an image that hasn't loaded,
+say — it tries again every half-second, up to six times, before giving up on that one item.
 
 ### Watching the like button
 
@@ -305,20 +393,64 @@ worse than downloads that occasionally don't, so only a real click counts.
 
 ### Saving, and what happens when it fails
 
-`downloads.download()` resolves as soon as the browser has *started* the transfer, which means its
-return value can't tell a completed file from a 404. So the background script keeps the download id
-and polls `downloads.search({ id })` every 500 ms until the item leaves `in_progress`. Only
-`complete` counts as a success.
+Browsers stop an idle background script. Chrome stops it after 30 seconds with nothing happening,
+or when a single event takes more than five minutes to handle; Firefox stops it after 30 seconds
+without an incoming event, and merely calling APIs doesn't count. So the background script never
+sits inside a function waiting for a download to finish. Instead, it's built to **pick up where it
+left off whenever it's woken**:
 
-Anything else is retried — three times, waiting 0.3 s, then 0.8 s, then 1.5 s. Interruption reasons
-that can't change on a second attempt (`USER_CANCELED`, a 404, a 403, no disk space, and so on)
-skip the retries and fail immediately. Each failed attempt is erased from the download history
-before the next one, so a file that never arrives leaves nothing behind — no broken file, no row in
-the downloads list.
+* **The queue, the item being saved and the counter are written to `storage.session` on every
+  change.** A restarted background script reads them back and carries on.
+* **A save request is answered immediately** with how many items were accepted. Progress and
+  results follow separately — the counter together with any file that was just saved
+  (`smdUpdate`), and the result of one button press (`smdBatch`), which is also what clears the
+  button's busy state.
+* **Completion arrives as a `downloads.onChanged` event.** `downloads.download()` returns as soon as
+  a transfer *starts*, so this event is what tells a finished file from a 404. Only `complete`
+  counts as a success.
+* **An `alarms` tick every 30 seconds** (only while something is queued) catches any missed event,
+  and gives up on a transfer whose received byte count hasn't moved for **three minutes**. Total
+  time doesn't matter, so a big video on a slow line still gets to finish. A transfer given up on
+  this way is left in place, since the user may simply have paused it.
 
-The polling has a second, useful effect: each `downloads.search()` call resets the service worker's
-idle timer, so the background script survives a long video download instead of being shut down
-halfway through.
+Saves run **one at a time**, even across posts. Parallel transfers fail more often, and with
+*Always show the save dialog* on they'd open a stack of dialogs at once. The background script also
+checks every URL and file name itself: nothing but X's media hosts and Bluesky's `getBlob` is
+downloaded, and nothing is written outside the downloads folder. Anything rejected counts as failed.
+
+Failures are retried — three times, waiting 0.3 s, then 0.8 s, then 1.5 s. Interruption reasons that
+can't change on a second attempt (a 404, a 403, no disk space, and so on) skip the retries and fail
+immediately. Each failed attempt is erased from the download history before the next one, so a file
+that never arrives leaves nothing behind — no broken file, no row in the downloads list.
+
+Closing the save dialog, or cancelling a download from the browser's download list, doesn't count as
+a failure: it isn't added to *Failed*, and no toast appears.
+
+### The counter and the saved-media record
+
+The counter is stored in `storage.session` alongside the queue, and every time a file changes
+state the background sends an `smdUpdate` message to every open X / Bluesky tab (a file that was
+just saved rides along in the same message, halving the number of messages). Because it's saved
+with the queue, the numbers stay right even if the background script is stopped and restarted. The
+background also decides *when* the counter should disappear (`hideAt`) and sends that along, so every
+tab hides it at the same moment; the next save after that starts counting from zero again.
+
+The saved-media record lives in `storage.session`, shaped like `{ "x:1234567890": value }`. The key
+is `site:postId`, and the value is a single number: *media count × 2³² + a bit mask of the saved
+items*, where bit *n* is set once item *n* (zero-based) has been saved — so items 1 and 3 of four
+saved is `4 × 2³² + 0b101`. That's much lighter than an object or array per post, in memory, in
+messages and in writes (and it's why only posts with up to 32 media items are recorded; X and
+Bluesky both stop at four). It's capped at 3000 posts, oldest dropped first. A tab that has just
+loaded sends `smdState` to receive the current record and counter.
+
+X sometimes reuses a post's elements to show a different post. Link `href` changes are watched too,
+so the buttons are repainted when that happens. When a file is saved, only the places showing that
+post are repainted.
+
+Normal and private windows share the same background script, so both the counter and the record
+are kept per the sending tab's `incognito` flag. Because `storage.session` survives until the whole
+browser closes, the private-window record is dropped from a `windows.onRemoved` listener as soon as
+no private windows remain.
 
 ---
 
@@ -333,8 +465,16 @@ scan. Buttons are never injected into the full-screen lightbox.
 Check the setting is on — it ships off. Then check the post actually has media the extension
 recognises: quoted media, link-card previews and Tenor GIFs are excluded here exactly as they are
 for the buttons. Note also that X's `L` keyboard shortcut isn't detected; only a click on the like
-button is. If you'd already liked and unliked that post in this tab, it counts as saved — reload
-the page to clear that.
+button is. And a like never re-saves media that's already saved — if the buttons show a check
+mark, that's why. Press the download button instead; buttons will save again as often as you like.
+
+**The saved-state check marks disappeared.**
+The record is cleared when the browser closes, and when the extension is updated or reloaded.
+Private-window records are cleared when the last private window closes.
+
+**The counter shows more files than I saved in this tab.**
+It's the total across all open tabs (private windows are counted separately), so saves running in
+another tab are included.
 
 **On X: "Could not get the media URL. Please reload the page."**
 The GraphQL response for that post was never seen, and the DOM fallback found nothing usable —
@@ -357,9 +497,13 @@ failed attempts are erased, so there's no half-written file to clean up.
 **Files are saved without an extension.**
 Your template is missing `{ext}` — the warning line under the input says so.
 
+**Firefox doesn't offer "Ask every time".**
+Firefox's download API doesn't support it. To choose a location for every file, turn on
+*Always show the save dialog* instead.
+
 **Part of the filename vanished.**
-Either a conditional block was dropped because a placeholder inside it was empty, or the
-characters were illegal in a filename and were stripped. `{text}` also has all URLs removed, so
+Either a conditional block was dropped because a placeholder inside it was empty, the characters
+were illegal in a filename and were stripped, or the segment hit the 150-byte cap. `{text}` also has all URLs removed, so
 a post that was nothing but a link renders as empty.
 
 **Everything is landing in one folder / in strange subfolders.**
@@ -378,20 +522,25 @@ last write wins.
 ## 🌐 Requirements
 
 * **Manifest version:** V3
-* **Google Chrome / Chromium-based browsers:** v123 or later
-* **Mozilla Firefox:** v140.0 or later
+* **Google Chrome:** latest (the manifest's floor is v126)
+* **Mozilla Firefox:** latest (the manifest's floor is v140.0)
 
-Both floors come from things the extension actually uses. On Chrome it's `light-dark()` in the
-settings screen (Chrome 123); MAIN-world content scripts, which make the X interceptor possible,
-only need Chrome 111.
+**Only the latest Chrome and Firefox are targeted.** There is no compatibility code for older
+versions or for other browsers, Chromium-based ones included.
+
+The floors written into the manifests come from things the extension actually uses. On Chrome it's
+`URL.parse` (Chrome 126), used to validate URLs; older versions of Chrome can't install it.
 
 On Firefox the binding constraint isn't a JavaScript or CSS feature at all — it's
 `browser_specific_settings.gecko.data_collection_permissions`, the key that declares this
 extension collects nothing. Firefox only understands it from **140** onwards, and Mozilla's own
 guidance is to set `strict_min_version` to match so the extension can't install somewhere the
-declaration would be silently ignored. (MAIN-world content scripts would have been satisfied by
-Firefox 128.) Firefox 140 is also the current ESR, so ESR users are covered without a separate
-line.
+declaration would be silently ignored.
+
+There are separate manifests for Chrome (`manifest.json`, plus its original,
+`manifest-chrome.json`) and for Firefox (`manifest-firefox.json`). They differ in exactly three
+keys: how the background is declared (a service worker on Chrome, an event page on Firefox), and
+the browser-specific key on each side (`minimum_chrome_version` / `browser_specific_settings`).
 
 **Firefox for Android is not supported.** The `downloads` API — which is the entire point of this
 extension — is documented inconsistently there, and `saveAs: true` is known to raise an error.
@@ -403,17 +552,20 @@ Until that's tested on real hardware, claiming support would be guessing.
 
 No analytics, no telemetry, no identifiers, no ads, and no server belonging to the developer.
 
-The extension asks for two permissions — `downloads` to save files (and to follow each save to
-completion, so failures can be retried and cleared away), and `storage` to remember your four
-settings — plus access to `x.com`, `twitter.com`, `bsky.app`, `public.api.bsky.app` and
-`plc.directory`.
+The extension asks for three permissions — `downloads` to save files (and to follow each save to
+completion, so failures can be retried and cleared away), `storage` to remember your four settings
+and, until the browser closes, which media you've saved and what's still queued, and `alarms` to
+check on a running download every 30 seconds — plus access to `x.com`, `twitter.com`, `bsky.app`,
+`public.api.bsky.app` and `plc.directory`.
 
 It does make network requests, and it's worth being precise about which: **only when a save is
 triggered** — by the download button, or by a like if you turned that on — and only to Bluesky's
 public API and the author's PDS. On X it makes no requests of its own at all — it reads responses
-the page had already received. Which posts you like is never recorded anywhere that outlives the
-tab, and nothing about what you view or save is transmitted. Full details in
-[PRIVACY.md](PRIVACY.md).
+the page had already received. Which media you've saved is recorded only on your device, in
+`storage.session`, for the saved-state buttons — never synced, never sent, and cleared when the
+browser closes. What you view and which posts you like aren't recorded at all (a save triggered by a
+like is remembered as a save, nothing more), and nothing about what you view or save is transmitted.
+Full details in [PRIVACY.md](PRIVACY.md).
 
 ---
 
@@ -425,11 +577,11 @@ tab, and nothing about what you view or save is transmitted. Full details in
 manifest.json             Extension manifest (MV3) — a byte-for-byte copy of manifest-chrome.json
 manifest-chrome.json      Chrome variant: minimum_chrome_version, service-worker background
 manifest-firefox.json     Firefox variant: browser_specific_settings, event-page background
-background.js             Service worker: downloads (with retries), Bluesky API, DID → PDS resolution, caching
+background.js             Service worker: download queue (retries, resumes after being stopped), counter, saved-media record, Bluesky API, DID → PDS resolution, caching
 popup.html/.css/.js       Settings UI (also serves as the options page)
-content.css               Button and toast styles, injected into both sites
+content.css               Button, toast and counter styles, injected into both sites
 shared/template.js        SMD  — i18n, filename templates, defaults
-shared/core.js            SMDCore — button injection, save flow, toasts
+shared/core.js            SMDCore — button injection, save flow, toasts, counter, saved-state buttons
 sites/x/interceptor.js    MAIN world: wraps fetch / XHR to harvest media URLs
 sites/x/content.js        X adapter
 sites/bluesky/content.js  Bluesky adapter
@@ -445,10 +597,12 @@ icons/
 | `site` | `"x"` / `"bluesky"`. Selects the CSS accent colour via `<html data-smd-site>` |
 | `postRoot` | Selector matching the container of a single post |
 | `mediaContainers(root)` | The elements wrapping each media item |
-| `readPost(root)` | `{ site, screenName, postId, name, text, time }` or `null` |
-| `getMedia(root, post)` | `[{ kind, url, ext, id, res }]`. May also fill in fields on `post` |
+| `postId(root)` | Just the post ID (or `null`), quickly. Called every time the buttons are repainted, so keep it light |
+| `readPost(root)` | `{ site, screenName, postId, name, text, time }` or `null`. May be expensive (it reads the post text); only called when saving |
+| `getMedia(root, post)` | `[{ kind, url, ext, id, res }]`, in the same order as `mediaContainers`, with `null` for any item whose URL is unknown (never drop it — item buttons are matched by position). May also fill in fields on `post` |
 | `actionBar(root)` | The element the main button is appended to |
 | `likeButton` | *Optional.* Selector for the like button, used by save-on-like. Must **not** match the un-like button. Omit it and only that feature switches off |
+| `watch` | *Optional.* Selector for the elements the buttons depend on (media, links to the post, action-bar buttons). Only additions or removals of these inside a post cause its buttons to be looked at again. Omit it and any change inside a post does (it works, just more slowly) |
 
 ### Adding a site
 
@@ -461,14 +615,16 @@ change.
 
 There's no build step, so `chrome://extensions` → **Reload** picks up every edit.
 
-* **Content scripts and the toast** — the page's own console.
+* **Content scripts, the toast and the counter** — the page's own console.
 * **The interceptor** — also the page's console, but note it runs in the MAIN world, so it shares
   globals with X itself.
 * **`background.js`** — the service worker's console, reachable from the extensions page. It stops
-  when idle and restarts on the next message, which empties its cache; that's expected.
+  when idle and restarts on the next message, which empties its cache; that's expected. The queue
+  and counter (key `queue`) and the saved-media record can be inspected there with
+  `chrome.storage.session.get()` — unlike the cache, they survive the service worker stopping.
 
 To preview a UI language without changing your browser settings, note that `popup.js` reads
-`api.i18n.getUILanguage()` — switch the browser's display language, or load the folder with a
+`chrome.i18n.getUILanguage()` — switch the browser's display language, or load the folder with a
 different `default_locale` while testing.
 
 ---

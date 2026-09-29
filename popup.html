@@ -7,8 +7,8 @@
     ツールバーのアイコンを押したときに開く設定画面。
     manifest.json では 2 か所から参照されています。
 
-      action.default_popup   → アイコンクリックで小さなポップアップとして表示
-      options_ui.page        → 拡張機能の管理画面から「オプション」で開く
+        action.default_popup   → アイコンクリックで小さなポップアップとして表示
+        options_ui.page        → 拡張機能の管理画面から「オプション」で開く
                                （open_in_tab: true なのでタブとして開きます）
 
     このファイルには「箱」だけを書き、中の文字は一切書いていません。
@@ -19,7 +19,7 @@
 
 <!--
     lang 属性は仮の値です。popup.js が起動時に
-    ブラウザの表示言語（api.i18n.getUILanguage()）で上書きします。
+    ブラウザの表示言語（chrome.i18n.getUILanguage()）で上書きします。
 -->
 <html lang="en">
 
@@ -37,8 +37,8 @@
 
         defer を付けると「HTML の読み込みが終わってから、書いた順に実行」
         となります。これにより
-          ・DOM が未完成の状態で要素を探して失敗する
-          ・popup.js が先に走って SMD が未定義になる
+            ・DOM が未完成の状態で要素を探して失敗する
+            ・popup.js が先に走って SMD が未定義になる
         の 2 つを同時に防げます。
     -->
     <script src="shared/template.js" defer></script>
@@ -76,12 +76,13 @@
 
                 spellcheck="false"    テンプレートは英単語ではないので赤波線を止める
                 autocomplete="off"    過去の入力候補が邪魔なので出さない
+                maxlength="500"       storage.sync は 1 項目 8KB までなので、それを超えて保存に失敗しないよう抑える
 
                 #warning は空の p です。中身は popup.js が入れますが、
                 CSS 側で min-height を指定してあるため、警告が出たり消えたりしても
                 下のレイアウトがガタつきません。
             -->
-            <label class="field-label" for="file" data-i18n="labelFile"></label><input type="text" id="file" spellcheck="false" autocomplete="off"><p id="warning"></p>
+            <label class="field-label" for="file" data-i18n="labelFile"></label><input type="text" id="file" maxlength="500" spellcheck="false" autocomplete="off"><p id="warning"></p>
 
             <!-- ライブプレビューの表示先。popup.js が 4 パターンのサンプルを描画します -->
             <div id="preview"></div>

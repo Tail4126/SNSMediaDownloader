@@ -38,13 +38,20 @@ as-is.
 * **Network requests only to the endpoints already documented** — `public.api.bsky.app`,
   `plc.directory`, and the author's PDS, all of them triggered by an explicit save. Anything new
   needs an issue first, and needs to be added to PRIVACY.md in the same PR.
-* **No new permissions** beyond `downloads` and `storage` without discussing it in an issue first.
+* **No new permissions** beyond `downloads`, `storage` and `alarms` without discussing it in an issue first.
   Widening `host_permissions` counts.
-* **Manifest V3 only.** Chrome 123+ / Firefox 140.0+ — the Firefox floor comes from
-  `data_collection_permissions`, not from a JS feature. Don't lower it without dropping that key.
-* **Never widen what gets downloaded.** URLs handed to `chrome.downloads` must be `https://` and
-  must come from the post the user clicked. Both the message receiver and the download handler
-  validate this independently — keep both.
+* **Manifest V3, latest Chrome and latest Firefox only.** No compatibility code for older versions
+  or other browsers — use current APIs directly (`chrome.*`, not `browser ?? chrome`). The Chrome
+  floor (`minimum_chrome_version`, now 126 because of `URL.parse`) tracks the newest API the code
+  uses: raise it when you start using something newer. Firefox's `strict_min_version` stays at 140
+  because of `data_collection_permissions`.
+* **Assume the background script can be stopped at any moment.** Keep anything that must survive in
+  `storage.session`, drive work from events and alarms, and never keep a message response waiting
+  for a download to finish — Chrome stops a service worker whose single event runs past five
+  minutes, and Firefox stops an event page 30 seconds after the last incoming event.
+* **Never widen what gets downloaded.** URLs handed to `chrome.downloads` must be `https://` on X's
+  media hosts or Bluesky's `getBlob`, and must come from the post the user clicked. The X message
+  receiver and the download handler validate this independently — keep both.
 * **Post media only.** Quote posts, link cards, avatars, external GIF embeds and the lightbox stay
   untouched.
 
@@ -80,9 +87,9 @@ Three consoles matter, and they're different consoles:
 
 | What you're debugging | Where to look |
 | :--- | :--- |
-| Adapters, `shared/core.js`, toasts | The **page's** console on x.com / bsky.app |
+| Adapters, `shared/core.js`, toasts, the counter | The **page's** console on x.com / bsky.app |
 | `sites/x/interceptor.js` | Also the page's console — but it runs in the MAIN world and shares globals with X itself |
-| `background.js` | The service worker's console, from the extensions page |
+| `background.js`, the saved-media record | The service worker's console, from the extensions page — `chrome.storage.session.get()` shows the record |
 
 The service worker stops when idle and restarts on the next message, so its cache empties on its
 own. That's expected, not a bug.
@@ -136,6 +143,10 @@ Some facts live in more than one file. Change only one and the project starts co
 | Adding a site | `manifest.json` · `SITE` in `shared/template.js` · `content.css` accent block · README (en/ja) · `.github/ISSUE_TEMPLATE/bug_report.yml` (the site dropdown) |
 | Anything in the manifest | `manifest-chrome.json` · `manifest.json` (copy it over) · `manifest-firefox.json` — the three differ in exactly three keys, and nothing else should ever diverge |
 | What gets stored, which permissions are used, or which hosts are contacted | `PRIVACY.md` — the body **and** the "Last updated" date, in the same commit · the privacy sections of both READMEs |
+| The selectors an adapter's `mediaContainers()`, `postId()` or `actionBar()` rely on | That adapter's `watch` selector too — only changes matching it make the buttons look again, so a missing entry means buttons that don't appear or don't update |
+| What `getMedia()` returns | Keep it in the same order as `mediaContainers()`, with `null` for unknown items — item buttons, the saved-media record and `{n}` all rely on the position |
+| The messages between the background and the tabs (`download`, `smdState`, `smdUpdate`, `smdBatch`) | `background.js` (`HANDLERS`, `broadcast()`) · `shared/core.js` (`save()` and the `onMessage` listener in `start()`) — both ends validate what they receive, keep it that way |
+| The saved-media record's shape, or when it's cleared | `background.js` · `shared/core.js` · `PRIVACY.md` §1.2 and §5 (en/ja) · the saved-state sections of both READMEs |
 
 ## Pull requests
 
@@ -194,12 +205,19 @@ JSON ファイル（`manifest.json`、`_locales/*/messages.json`）は対象外�
 * **通信先は文書化済みのものだけ。** `public.api.bsky.app`、`plc.directory`、投稿者の PDS の 3 つで、
   いずれもユーザーが保存ボタンを押したときにだけ発生します。追加が必要なら先に Issue を立て、
   同じプルリクエストで PRIVACY.md も更新してください。
-* **`downloads` と `storage` 以外の権限は追加しません。** `host_permissions` を広げるのも同じ扱いです。
+* **`downloads`・`storage`・`alarms` 以外の権限は追加しません。** `host_permissions` を広げるのも同じ扱いです。
   必要になったら、まず Issue で相談してください。
-* **Manifest V3 のみ。** Chrome 123 以降 / Firefox 140.0 以降。Firefox 側の下限は JS の機能ではなく
-  `data_collection_permissions` に由来します。このキーを外さない限り下げないでください。
-* **ダウンロードする対象を広げないこと。** `chrome.downloads` へ渡す URL は `https://` で始まり、
-  かつユーザーがクリックした投稿由来のものに限ります。メッセージ受信時とダウンロード直前の
+* **Manifest V3、最新の Chrome と最新の Firefox のみ。** 古いバージョンや他のブラウザ向けの
+  互換処理は書きません。API はそのまま使います（`browser ?? chrome` ではなく `chrome.*`）。
+  Chrome の下限（`minimum_chrome_version`。今は `URL.parse` のため 126）は、コードが使う
+  最も新しい API に合わせます。より新しいものを使い始めたら引き上げてください。
+  Firefox の `strict_min_version` は `data_collection_permissions` のため 140 のままにします。
+* **バックグラウンドはいつ止められてもおかしくない前提で書きます。** 残す必要のある状態は
+  `storage.session` に置き、処理はイベントとアラームで進め、ダウンロードの完了までメッセージの返事を
+  待たせないでください。Chrome は 1 つのイベントの処理が 5 分を超えた Service Worker を止め、
+  Firefox は最後にイベントが届いてから 30 秒でイベントページを止めます。
+* **ダウンロードする対象を広げないこと。** `chrome.downloads` へ渡す URL は、X のメディア配信ホストか
+  Bluesky の `getBlob` の `https://` で、かつユーザーがクリックした投稿由来のものに限ります。メッセージ受信時とダウンロード直前の
   2 か所で独立に検証しています。両方とも残してください。
 * **投稿メディアのみが対象。** 引用投稿・リンクカード・アイコン画像・外部 GIF 埋め込み・
   ライトボックスには触りません。
@@ -237,9 +255,9 @@ JSON ファイル（`manifest.json`、`_locales/*/messages.json`）は対象外�
 
 | デバッグ対象 | 見る場所 |
 | :--- | :--- |
-| アダプタ、`shared/core.js`、トースト | x.com / bsky.app の**ページ側**コンソール |
+| アダプタ、`shared/core.js`、トースト、カウンター | x.com / bsky.app の**ページ側**コンソール |
 | `sites/x/interceptor.js` | 同じくページ側。ただし MAIN world で動き、X 本体とグローバルを共有します |
-| `background.js` | 拡張機能ページから開くサービスワーカーのコンソール |
+| `background.js`、保存済みの記録 | 拡張機能ページから開くサービスワーカーのコンソール。記録は `chrome.storage.session.get()` で見られます |
 
 サービスワーカーはアイドル状態で停止し、次のメッセージで再起動します。
 そのときキャッシュが空になるのは正常な挙動で、不具合ではありません。
@@ -301,6 +319,10 @@ Bluesky のアダプタは、これを使って本文と投稿日時を API の�
 | サイトの追加 | `manifest.json` ・ `shared/template.js` の `SITE` ・ `content.css` のアクセント色 ・ README 英日 ・ `.github/ISSUE_TEMPLATE/bug_report.yml` のサイト選択肢 |
 | マニフェストの内容 | `manifest-chrome.json` ・ `manifest.json`（コピーする） ・ `manifest-firefox.json` — 3 つの差分は 3 キーだけで、それ以外が食い違ってはいけません |
 | 保存内容、使用する権限、通信先 | `PRIVACY.md` の本文**および**「最終更新」日を、同じコミットで ・ README 英日のプライバシー節 |
+| アダプタの `mediaContainers()`・`postId()`・`actionBar()` が頼るセレクタ | そのアダプタの `watch` も合わせて直す — これに当てはまる変化でしかボタンを見直さないので、漏れがあるとボタンが出ない・更新されない原因になります |
+| `getMedia()` の戻り値 | `mediaContainers()` と同じ並びを保ち、分からないものは `null` にする — 個別ボタン・保存済みの記録・`{n}` がすべて位置に依存しています |
+| バックグラウンドとタブの間のメッセージ（`download`・`smdState`・`smdUpdate`・`smdBatch`） | `background.js` の `HANDLERS` と `broadcast()` ・ `shared/core.js` の `save()` と `start()` 内の `onMessage` リスナー — 受け取った値はどちらの側でも検証しています。その形を崩さないでください |
+| 保存済みの記録の形式、消えるタイミング | `background.js` ・ `shared/core.js` ・ `PRIVACY.md` §1.2 と §5（英日） ・ README 英日の保存済みの表示の節 |
 
 ## プルリクエスト
 

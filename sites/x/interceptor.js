@@ -2,20 +2,21 @@
 /**
  * sites/x/interceptor.js
  * ==================================================================
- * X（Twitter）の API レスポンスを横取りして、動画・画像の本当の URL を集めるスクリプト。
+ * X（Twitter）の API レスポンスを覗いて、動画・画像の本当の URL を集めるスクリプト。
  *
- * なぜ必要か:
- *   X の動画プレイヤーは <video src="blob:https://x.com/..."> という形になっており、
- *   この blob: URL はページ内部だけで有効な一時的な参照です。ダウンロードには使えません。
- *   そこで、X 自身がサーバーから受け取っている JSON を覗いて、
- *   本物の .mp4 の URL を先に拾っておく、という作戦を取ります。
+ * X の動画プレイヤーは <video src="blob:..."> という形で、この blob: URL はページの中でしか
+ * 通用せず、ダウンロードには使えません。そこで X 自身が受け取っている JSON から
+ * 本物の .mp4 の URL を先に拾っておきます。
  *
- * 実行環境について:
- *   manifest.json でこのファイルだけ "world": "MAIN" が指定されています。
- *   通常の content script はページとは別の隔離された世界で動くため、
- *   ページ側の window.fetch を書き換えることができません。
- *   MAIN world ならページと同じ世界で動くので、書き換えが可能になります。
- *   その代わり拡張機能 API は使えないので、結果は postMessage で content.js へ渡します。
+ * manifest.json でこのファイルだけ "world": "MAIN"（ページと同じ JavaScript の世界）で動きます。
+ * ページの fetch / XMLHttpRequest を包めるのはこの世界だけです。代わりに拡張機能の API は
+ * 使えないので、結果は postMessage で content.js へ渡します。
+ *
+ * 【X の動作を遅くしないための工夫】
+ * X は API の応答を大量に受け取るので、ここでの処理はすべて X の画面表示の上乗せになります。
+ *   - メディアを含まない応答は、JSON として解析する前に、文字列の検索だけで見送る
+ *   - 解析と走査は、ブラウザの手が空いたとき（requestIdleCallback）に回す
+ *   - JSON を走査するときに、余計な配列を作らない
  * ==================================================================
  */
 
@@ -23,136 +24,162 @@
     "use strict";
 
     /**
-     * この URL は監視対象（X の API）か判定する。
-     *
-     * @param {string|URL|Request} url - リクエスト先
-     * @returns {boolean} /graphql/ か /i/api/ を含んでいれば true
+     * メディアを含む応答にだけ現れる文字列。
+     * X の media エントリは、写真・動画・GIF のどれでも media_url_https を持っています。
+     * これを含まない応答は、JSON として解析するまでもなく対象外です。
      */
-    const isTarget = (url) => /\/(?:graphql|i\/api)\//.test(String(url));
+    const MEDIA_HINT = '"media_url_https"';
 
     /**
-     * X の JSON に含まれるメディア 1 件分の情報を、この拡張機能で使う形へ変換する。
+     * 監視対象（X の API）の URL か。
      *
-     * @param {object} m - X の media エントリ
-     * @returns {{kind: string, url: string, ext: string}|null} 変換結果。対象外なら null
+     * @param {string} url
+     * @returns {boolean}
+     */
+    const isTarget = (url) => /\/(?:graphql|i\/api)\//.test(url);
+
+    /**
+     * 処理を、ブラウザの手が空いたときに回す。
+     * 遅くとも 1 秒以内には実行されます（ユーザーが保存ボタンを押すまでには間に合います）。
+     * 例外は握りつぶします（JSON でない応答などは、単に対象外です）。
+     *
+     * @param {() => void} task
+     * @returns {void}
+     */
+    const later = (task) => {
+        requestIdleCallback(() => {
+            try {
+                task();
+            } catch {
+                // 対象外の応答です。
+            }
+        }, { timeout: 1000 });
+    };
+
+    /**
+     * X の media エントリ 1 件を、この拡張機能で使う形へ変換する。
+     *
+     * @param {object} m
+     * @returns {{kind: string, url: string, ext: string}|null} 対象外なら null
      */
     const toMedia = (m) => {
-        // --- 静止画の場合 ---
         if (m?.type === "photo") {
-            // URL から「拡張子より前の部分」を取り出します。
-            const base = /^(https?:\/\/pbs\.twimg\.com\/media\/[^./?]+)(?:\.(\w+))?/.exec(m.media_url_https ?? "");
+            const base = /^(https:\/\/pbs\.twimg\.com\/media\/[^./?]+)(?:\.(\w+))?/.exec(m.media_url_https ?? "");
             if (!base) return null;
 
-            // 拡張子は URL の末尾か ?format= のどちらかに入っています。両方無ければ jpg と仮定。
+            // 拡張子は URL の末尾か ?format= に入っています。name=orig で原寸を取得できます。
             const ext = (base[2] ?? /[?&]format=(\w+)/.exec(m.media_url_https)?.[1] ?? "jpg").toLowerCase();
-
-            // name=orig を付けると、リサイズされていないオリジナル画像が取得できます。
             return { kind: "photo", url: `${base[1]}?format=${ext}&name=orig`, ext };
         }
 
-        // --- 動画・GIF 以外はここで終了 ---
         if (m?.type !== "video" && m?.type !== "animated_gif") return null;
 
-        // 動画は複数の画質（variants）が用意されているので、その中から最高画質を選びます。
-        const best = (m.video_info?.variants ?? [])
-            .filter((v) => v?.content_type === "video/mp4" && typeof v.url === "string") // m3u8 などを除外
-            .sort((a, b) => (b.bitrate ?? 0) - (a.bitrate ?? 0))[0]; // ビットレートの降順に並べて先頭
+        // 動画は複数の画質（variants）があるので、mp4 の中からビットレートが最も高いものを選びます。
+        let best = null;
+        for (const v of m.video_info?.variants ?? []) {
+            if (v?.content_type !== "video/mp4" || typeof v.url !== "string") continue;
+            if (!best || (v.bitrate ?? 0) > (best.bitrate ?? 0)) best = v;
+        }
 
         return best ? { kind: m.type, url: best.url, ext: "mp4" } : null;
     };
 
     /**
-     * JSON の中を再帰的に歩き回り、投稿 ID とメディア一覧の対応を集める。
+     * JSON 全体を再帰的に調べ、投稿 ID とメディア一覧の対応を集める。
+     * X のレスポンスは構造が深く変わりやすいので、決まった場所ではなく全体から拾います。
      *
-     * X のレスポンスは階層が深く、しかもバージョンによって構造が変わります。
-     * そのため「決まった場所を見に行く」のではなく「全部見て、それらしいものを拾う」
-     * という総当たりの方針にしてあります。
+     * 子を調べる前に「オブジェクトか」を確かめて、文字列や数値のために関数を呼ばないようにしています。
+     * また Object.values() は呼ぶたびに配列を作るので、for...in で直接たどります。
      *
-     * @param {unknown} node - 現在調べているノード
-     * @param {Record<string, object[]>} found - 見つかった結果を溜める入れ物
-     * @param {Set<object>} seen - 訪問済みオブジェクト（循環参照で無限ループしないため）
-     * @returns {Record<string, object[]>} found と同じオブジェクト
+     * @param {object} node - オブジェクトまたは配列
+     * @param {Record<string, (object|null)[]>} found - 結果を溜める入れ物
+     * @returns {void}
      */
-    const harvest = (node, found, seen) => {
-        // オブジェクト以外、または訪問済みなら打ち切り。
-        if (!node || typeof node !== "object" || seen.has(node)) return found;
-        seen.add(node);
-
-        // 投稿 ID は新形式では rest_id、旧形式では id_str に入っています。
-        const id = node.rest_id ?? node.id_str;
-
-        // メディア情報も legacy というキーの下にある場合とない場合があります。
-        const source = node.legacy ?? node;
-
-        // extended_entities のほうが動画情報を含むので優先します。
-        const media = (source.extended_entities ?? source.entities)?.media;
-
-        if (typeof id === "string" && Array.isArray(media)) {
-            const list = media.map(toMedia).filter(Boolean); // 変換できなかったものは捨てる
-
-            if (list.length) found[id] = list;
-
-            // 動画は、投稿 ID とは別に「サムネイル画像に含まれる動画 ID」でも引けるようにします。
-            // content.js 側で、投稿 ID が分からない状況でも動画を特定できるようにするためです。
-            const videoId = /\/(?:ext_tw_video|amplify_video)\/(\d+)\//.exec(list[0]?.url ?? "")?.[1];
-            if (videoId) found[`v${videoId}`] = list;
+    const harvest = (node, found) => {
+        if (Array.isArray(node)) {
+            for (const child of node) {
+                if (child !== null && typeof child === "object") harvest(child, found);
+            }
+            return;
         }
 
-        // 子要素へ潜っていきます（配列もオブジェクトも Object.values で扱えます）。
-        for (const child of Object.values(node)) harvest(child, found, seen);
+        // 投稿 ID は rest_id か id_str に、メディアは legacy の下にあることが多いです。
+        const id = node.rest_id ?? node.id_str;
+        const source = node.legacy ?? node;
+        const raw = (source.extended_entities ?? source.entities)?.media; // extended_entities のほうが動画情報を含む
 
-        return found;
+        if (typeof id === "string" && Array.isArray(raw)) {
+            // 変換できなかったものも null のまま残し、画面上の並びと番号をそろえます。
+            const list = raw.map(toMedia);
+            if (list.some(Boolean)) found[id] = list;
+
+            // 動画はメディア ID でも引けるようにします。サムネイル URL に同じ ID が入っているので、
+            // 投稿 ID が分からない場面でも content.js が動画を特定できます。
+            raw.forEach((m, i) => {
+                if (list[i] && list[i].kind !== "photo" && typeof m.id_str === "string") found[`v${m.id_str}`] = [list[i]];
+            });
+        }
+
+        for (const key in node) {
+            const child = node[key];
+            if (child !== null && typeof child === "object") harvest(child, found);
+        }
     };
 
     /**
-     * レスポンス JSON を解析し、成果があれば content.js へ送る。
+     * 解析済みの JSON を調べ、見つかったものを content.js へ送る。
      *
-     * @param {unknown} data - API のレスポンス JSON
+     * @param {unknown} data
      * @returns {void}
      */
     const scan = (data) => {
-        const entries = harvest(data, {}, new Set());
+        if (data === null || typeof data !== "object") return;
 
-        if (Object.keys(entries).length > 0) {
-            // 第 2 引数（targetOrigin）に location.origin を指定することで、
-            // 同一オリジンのスクリプトにしか届かないようにしています。
-            postMessage({ channel: "smd-cache", entries }, location.origin);
+        const found = {};
+        harvest(data, found);
+        for (const _ in found) {
+            postMessage({ channel: "smd-cache", entries: found }, location.origin);
+            return; // 1 件でもあれば送る（for...in は「空かどうか」を配列を作らずに確かめるため）
         }
-    };
-
-    // ================================================================
-    // ここから「モンキーパッチ」。既存の関数を自分の関数で包み直します。
-    // ================================================================
-
-    // 元の関数を必ず控えておきます。これを忘れると通信そのものが壊れます。
-    const originalFetch = fetch;
-
-    window.fetch = function (input, init) {
-        // まず本来の fetch をそのまま実行します。
-        const promise = originalFetch.call(this, input, init);
-
-        if (isTarget(input?.url ?? input)) {
-            // res.clone() が重要です。レスポンスの中身は 1 回しか読めないため、
-            // 複製してから読まないと X 本体がデータを受け取れなくなってしまいます。
-            promise.then((res) => res.ok && res.clone().json().then(scan)).catch(() => {});
-        }
-
-        // 呼び出し元には、元の Promise をそのまま返します（振る舞いを変えない）。
-        return promise;
     };
 
     /**
-     * 監視対象の XMLHttpRequest インスタンスを覚えておく集合。
-     * WeakSet なので、XHR が不要になればガベージコレクションを妨げません。
+     * 応答の本文（文字列）を調べる。メディアを含まないものは、解析せずに見送ります。
+     *
+     * @param {string} text
+     * @returns {void}
      */
+    const scanText = (text) => {
+        if (text.includes(MEDIA_HINT)) scan(JSON.parse(text));
+    };
+
+    // ================================================================
+    // fetch と XMLHttpRequest を包み直す（元の動作は変えず、結果を覗くだけ）
+    // ================================================================
+
+    const originalFetch = window.fetch;
+
+    window.fetch = function (...args) {
+        const promise = originalFetch.apply(this, args);
+
+        const [input] = args;
+        if (isTarget(input instanceof Request ? input.url : String(input))) {
+            // 本文は 1 回しか読めないので、clone() した複製のほうを文字列で読みます。
+            // 解析するかどうかは、文字列を見てから決めます。
+            promise
+                .then((res) => res.ok && res.clone().text().then((text) => later(() => scanText(text))))
+                .catch(() => {});
+        }
+        return promise;
+    };
+
+    const { open, send } = XMLHttpRequest.prototype;
     const watched = new WeakSet();
 
-    // XMLHttpRequest でも同じことをします。open で URL が分かり、send で送信されるので、
-    // 「open のときに印を付けて、send のときに監視を仕掛ける」という 2 段構えです。
-    const { open, send } = XMLHttpRequest.prototype;
-
     XMLHttpRequest.prototype.open = function (method, url, ...rest) {
-        if (isTarget(url)) watched.add(this); // this = この XHR インスタンス
+        // 同じ XHR が別の URL で使い回されることもあるので、open のたびに印を付け直します。
+        if (isTarget(String(url))) watched.add(this);
+        else watched.delete(this);
         return open.call(this, method, url, ...rest);
     };
 
@@ -160,13 +187,19 @@
         if (watched.has(this)) {
             this.addEventListener("load", () => {
                 try {
-                    // responseType が "json" なら response が既にオブジェクト、
-                    // それ以外は文字列なので自分で解析します。
-                    scan(this.responseType === "json" ? this.response : JSON.parse(this.responseText));
+                    if (this.responseType === "json") {
+                        // ブラウザが解析済みのオブジェクトです。X が後から手を加えることもあるので、
+                        // 後回しにせず、この場で調べます（解析し直す必要が無いので軽く済みます）。
+                        scan(this.response);
+                    } else if (this.responseType === "" || this.responseType === "text") {
+                        // 文字列は後から変わらないので、受け取っておいて手が空いたときに調べます。
+                        const text = this.responseText;
+                        later(() => scanText(text));
+                    }
                 } catch {
-                    // JSON でないレスポンスも普通にあるので、失敗は無視して構いません。
+                    // 対象外の応答です。
                 }
-            });
+            }, { once: true }); // 同じ XHR が何度も send されても、リスナーが積み重ならないように
         }
         return send.apply(this, args);
     };

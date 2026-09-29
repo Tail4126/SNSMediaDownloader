@@ -29,7 +29,6 @@
      * light-dark(A, B) は「ライトテーマなら A、ダークテーマなら B」を選ぶ関数です。
      * 従来は @media (prefers-color-scheme: dark) のブロックを別に書いて
      * 全部の色を定義し直す必要がありましたが、この関数なら 1 行で済みます。
-     * ※ 比較的新しい機能なので、古いブラウザでは効きません
      */
     --bg: light-dark(#f9f9f9, #0f0f0f);                  /* 画面全体の背景 */
     --surface: light-dark(#ffffff, #212121);             /* カード（.group）の背景 */
@@ -82,7 +81,11 @@ body
      */
     width: 600px;
 
-    margin: 0; /* body の既定マージン（8px）を消す */
+    /*
+     * body の既定マージン（8px）を消します。左右の auto は、オプションページとして
+     * タブで開いたときに中央へ寄せるためのものです（ポップアップでは幅が同じなので効きません）。
+     */
+    margin: 0 auto;
     background-color: var(--bg);
     color: var(--fg);
 
