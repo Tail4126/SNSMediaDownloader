@@ -4,7 +4,7 @@
  * content.css
  * ==================================================================
  * X と Bluesky のページに直接差し込まれるスタイル。
- * ダウンロードボタンと通知（トースト）の見た目を定義します。
+ * ダウンロードボタン・通知（トースト）・ダウンロード数カウンターの見た目を定義します。
  *
  * ここが popup.css と決定的に違うのは「他人の家に間借りしている」点です。
  * サイト側の CSS と共存しなければならないため、次の 2 つを守っています。
@@ -29,6 +29,9 @@
 
     /* こちらは半透明にして使わないので、そのまま rgb() で書いています */
     --smd-idle: rgb(113, 118, 123); /* 押していないときのアイコン色 */
+
+    /* 保存済みの色（緑）。サイトを問わず同じにして「済み」を一目で分かるようにします */
+    --smd-done: 0, 186, 124;
 }
 
 /*
@@ -153,10 +156,46 @@
 }
 
 /* ------------------------------------------------------------------
+ * 保存済みの状態
+ * core.js の paint() が、保存済み履歴を見てこのクラスを付け外しします。
+ * アイコンも矢印からチェックマークへ差し替わります。
+ * ------------------------------------------------------------------ */
+.smd-button.smd-done,
+.smd-button.smd-done:hover
+{
+    color: rgb(var(--smd-done));
+}
+
+.smd-button.smd-done:hover
+{
+    background: rgba(var(--smd-done), 0.1);
+}
+
+/*
+ * 個別ボタンは普段ホバー時しか見えませんが、保存済みのものは常に表示します。
+ * どの画像を保存したか、マウスを乗せなくても一目で分かるようにするためです。
+ */
+.smd-item-button.smd-done
+{
+    opacity: 1;
+    background: rgba(var(--smd-done), 0.85);
+}
+
+/* 押せば何度でも保存し直せるので、ホバー時は通常のボタンと同じ色に戻します */
+.smd-item-button.smd-done:hover
+{
+    background: rgba(var(--smd-accent), 0.9);
+}
+
+/* ------------------------------------------------------------------
  * 処理中の状態
  * core.js がクリック時にこのクラスを付け、完了後に外します。
+ *
+ * クラスを 2 つ重ねた書き方にしているのは、上の .smd-item-button.smd-done
+ * （opacity: 1）と詳細度をそろえ、後に書いたこちらを優先させるためです。
  * ------------------------------------------------------------------ */
-.smd-busy
+.smd-button.smd-busy,
+.smd-item-button.smd-busy
 {
     opacity: 0.45; /* 薄くして「作業中」と伝える */
 
@@ -168,7 +207,8 @@
 }
 
 /* ------------------------------------------------------------------
- * トースト（画面下部に出る通知）
+ * トースト（画面下部に出るエラー通知）
+ * 成功は左下のカウンターで分かるので、トーストはエラーのときだけ出ます。
  * ------------------------------------------------------------------ */
 .smd-toast
 {
@@ -189,7 +229,7 @@
 
     padding: 10px 18px;
     border-radius: 9999px;
-    background: rgb(var(--smd-accent));
+    background: rgb(244, 33, 46); /* エラー用の赤。サイトを問わず同じ色 */
     color: #fff;
 
     /*
@@ -232,8 +272,93 @@
     transform: translateX(-50%) translateY(0);
 }
 
-/* エラー時だけ赤くします（サイトを問わず同じ赤なので変数化していません） */
-.smd-toast-error
+/* ------------------------------------------------------------------
+ * ダウンロード数カウンター（画面左下）
+ * core.js の showCounts() が作り、smd-counter-show の付け外しで表示を切り替えます。
+ * ------------------------------------------------------------------ */
+.smd-counter
 {
-    background: rgb(244, 33, 46);
+    position: fixed;
+    left: 16px;
+
+    /* iPhone などの画面下の丸みやホームバーに隠れないよう、安全領域の分を足します */
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+
+    z-index: 2147483647; /* トーストと同じく最前面へ */
+
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    border-radius: 9999px;
+
+    /* サイトのライト / ダークどちらでも読めるよう、濃い半透明の背景に白文字にします */
+    background: rgba(15, 20, 25, 0.88);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+
+    font-family: system-ui, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
+
+    /* 数字の幅をそろえ、件数が変わっても横にがたつかないようにします */
+    font-variant-numeric: tabular-nums;
+
+    /*
+     * 左下は X・Bluesky ともにアカウント切り替えなどのボタンがある場所です。
+     * クリックを素通りさせ、下にあるボタンを普段どおり押せるようにします。
+     */
+    pointer-events: none;
+
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.2s, transform 0.2s;
+}
+
+.smd-counter-show
+{
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.smd-counter-item
+{
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+}
+
+/* display を指定したため、hidden 属性だけでは消えなくなるので明示します */
+.smd-counter-item[hidden]
+{
+    display: none;
+}
+
+.smd-counter-label
+{
+    font-weight: 500;
+    opacity: 0.75;
+}
+
+.smd-counter-done .smd-counter-num
+{
+    color: rgb(var(--smd-done));
+}
+
+.smd-counter-failed .smd-counter-num
+{
+    color: rgb(255, 110, 110);
+}
+
+/*
+ * 狭い画面（スマホなど）では、画面下に X・Bluesky のナビゲーションバーが出ます。
+ * それと重ならないよう、カウンターをその上へ持ち上げます。
+ */
+@media (max-width: 800px)
+{
+    .smd-counter
+    {
+        bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    }
 }

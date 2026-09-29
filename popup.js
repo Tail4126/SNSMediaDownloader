@@ -2,73 +2,69 @@
 /**
  * popup.js
  * ==================================================================
- * ツールバーアイコンをクリックしたときに開く設定画面のスクリプト。
- * （manifest.json の options_ui でも同じ popup.html を使っています）
+ * ツールバーアイコンから開く設定画面（オプションページも同じ popup.html）。
  *
- * やっていること:
  *   - 画面の文言を現在の言語へ差し替える
- *   - ファイル名テンプレートの入力と、その結果のライブプレビュー
- *   - 変数ボタンのクリックでカーソル位置に変数を挿入
- *   - 入力を少し待ってから chrome.storage.sync へ自動保存
+ *   - ファイル名テンプレートのライブプレビューと入力チェック
+ *   - 変数ボタンでカーソル位置に変数を挿入
+ *   - 設定の自動保存（「保存」ボタンはありません）
+ *
+ * popup.html で shared/template.js（SMD）を先に読み込んでいるので、
+ * 翻訳・既定値・ファイル名の組み立ては、content script と同じものを使えます。
+ * プレビューに出るファイル名が、実際に保存されるファイル名と一致するのはこのためです。
  * ==================================================================
  */
 
 (() => {
     "use strict";
 
-    const api = globalThis.browser ?? globalThis.chrome;
-
-    // shared/template.js（SMD）は popup.html で先に読み込まれているので、そのまま使えます。
+    /** 翻訳文字列を取り出す関数（SMD.t の短縮名） */
     const t = SMD.t;
 
     /**
      * document.getElementById の短縮版。
      *
      * @param {string} id - 要素の id
-     * @returns {HTMLElement} 見つかった要素
+     * @returns {HTMLElement}
      */
     const $ = (id) => document.getElementById(id);
 
     /**
-     * 文字列を HTML に埋め込んでも安全な形へ変換する（XSS 対策）。
-     * < > & " を数値文字参照（&#60; など）へ置き換えます。
+     * HTML に埋め込んでも安全な形へ変換する（< > & " を文字参照へ）。
      *
-     * @param {unknown} s - 変換したい値
-     * @returns {string} エスケープ済みの文字列
+     * @param {unknown} s
+     * @returns {string}
      */
     const esc = (s) => String(s).replace(/[<>&"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
     /**
-     * 設定項目の id と、その値を読み書きするプロパティ名の対応表。
-     * チェックボックスだけは value ではなく checked を使う点に注意。
-     *
+     * 設定項目の id と、値を読み書きするプロパティの対応表。
+     * チェックボックスだけは value ではなく checked を使います。
      * ここに 1 行足すだけで、読み込み・保存・リセットのすべてに反映されます。
      */
-    const FIELDS = {
-        file: "value", conflictAction: "value", alwaysSaveAs: "checked", likeDownload: "checked",
-    };
+    const FIELDS = { file: "value", conflictAction: "value", alwaysSaveAs: "checked", likeDownload: "checked" };
 
     /**
-     * 画面上の入力内容を、保存できるオブジェクトの形にまとめる。
+     * 画面の入力内容を、保存できるオブジェクトにまとめる。
      *
-     * @returns {{file: string, conflictAction: string, alwaysSaveAs: boolean, likeDownload: boolean}}
+     * @returns {typeof SMD.DEFAULTS}
      */
     const readForm = () => Object.fromEntries(Object.entries(FIELDS).map(([id, prop]) => [id, $(id)[prop]]));
 
     /**
-     * 設定オブジェクトの内容を画面へ反映する（readForm の逆）。
+     * 設定を画面へ反映する（readForm の逆）。反映したらプレビューも作り直します。
      *
-     * @param {object} settings - 反映したい設定
+     * @param {typeof SMD.DEFAULTS} settings
      * @returns {void}
      */
     const writeForm = (settings) => {
         for (const [id, prop] of Object.entries(FIELDS)) $(id)[prop] = settings[id];
-        update(); // 表示を作り直す
+        update();
     };
 
     /**
-     * 「変数一覧」に並べるボタンの定義。
-     * [グループ名, [[変数, 説明], ...]] という入れ子構造になっています。
+     * 「変数一覧」に並べるボタンの定義。[グループ名, [[変数, 説明], ...]] という入れ子です。
+     * 日時の変数は、説明より実例のほうが分かりやすいので、例をそのまま書いています。
      */
     const TOKENS = [
         [t("grpPost"), [
@@ -76,7 +72,6 @@
             ["{id}", t("phId")], ["{text:30}", t("phText")],
         ]],
         [t("grpDate"), [
-            // 日時系は説明よりも実例のほうが分かりやすいので、そのまま例を書いています。
             ["{datetime}", "20260819_142530"], ["{date}", "20260819"], ["{time}", "142530"],
             ["{yyyy}", t("phYear")], ["{mm}", t("phMonth")], ["{dd}", t("phDay")],
             ["{hh}", t("phHour")], ["{mi}", t("phMin")], ["{ss}", t("phSec")],
@@ -88,23 +83,22 @@
             ["{media_id}", t("phMediaId")], ["{res}", t("phRes")],
         ]],
         [t("grpSyntax"), [
-            // 変数ではなく記法の説明。半角スペースは挿入時に取り除かれます（後述）。
+            // 記法の説明。表示用の半角スペースは挿入時に取り除きます。
             ["/", t("phSlash")], ["[ ]", t("phBracket")], ["\\[ \\]", t("phEscape")], [":20", t("phLimit")],
         ]],
     ];
 
     /**
-     * プレビュー用のダミー URL を作る（実在しないサンプルです）。
+     * プレビュー用のダミー URL（実在しません）。
      *
      * @param {string} cid - サンプルの CID
-     * @returns {string} getBlob 形式の URL
+     * @returns {string}
      */
     const blob = (cid) => `https://bsky.social/xrpc/com.atproto.sync.getBlob?did=did%3Aplc%3Aexample&cid=${cid}`;
 
     /**
-     * プレビューに表示する 4 パターンのサンプルデータ。
-     * X / Bluesky × 画像 / 動画 の組み合わせで、
-     * 「複数枚のとき」「1 枚のとき」の違いも確認できるようにしてあります。
+     * プレビューに出す 4 パターンのサンプル（X / Bluesky × 画像 / 動画）。
+     * 「複数枚のとき」と「1 枚のとき」の違い（{n?} など）も確かめられるようにしてあります。
      */
     const SAMPLES = [
         [`X · ${t("sampleImage24")}`, {
@@ -136,7 +130,7 @@
     ];
 
     /**
-     * プレビューと警告メッセージを最新の入力内容で作り直す。
+     * プレビューと警告を、今の入力内容で作り直す。
      *
      * @returns {void}
      */
@@ -144,74 +138,78 @@
         const settings = readForm();
         const now = new Date();
 
-        // --- プレビュー ---
-        // ユーザー入力を含む値は必ず esc() を通してから innerHTML に渡します。
+        // ユーザーの入力を含む値は、必ず esc() を通してから innerHTML に入れます。
         $("preview").innerHTML = SAMPLES.map(([label, ctx]) =>
             `<div><b>${esc(label)}</b><code>${esc(SMD.buildPath(settings, { ...ctx, now }))}</code></div>`
         ).join("");
 
-        // --- 警告 1: 存在しない変数が書かれていないか ---
-        // new Set(...) で重複を取り除いてから、既知の変数名リストと突き合わせます。
-        const unknown = [...new Set(SMD.tokensIn(settings.file))]
-            .filter((name) => !SMD.VARIABLE_NAMES.includes(name));
-
         const warnings = [];
 
-        // --- 警告 2: [ と ] の数が揃っているか ---
-        // 文字として書かれた \[ \] は数えたくないので、先に取り除いておきます。
+        // [ と ] の数が合っているか（文字として書いた \[ \] は数えない）
         const bare = SMD.dropEscaped(settings.file);
+        if ((bare.match(/\[/g) ?? []).length !== (bare.match(/\]/g) ?? []).length) warnings.push(t("warnBracket"));
 
-        // match は見つからないと null を返すので、?? [] で空配列にしてから length を数えます。
-        if ((bare.match(/\[/g) ?? []).length !== (bare.match(/\]/g) ?? []).length) {
-            warnings.push(t("warnBracket"));
-        }
-
+        // 知らない変数が無いか
+        const unknown = [...new Set(SMD.tokensIn(settings.file))].filter((n) => !SMD.VARIABLE_NAMES.includes(n));
         if (unknown.length > 0) warnings.push(t("warnUnknown", unknown.map((n) => `{${n}}`).join(" ")));
 
-        // --- 警告 3: 拡張子が抜けていないか ---
-        if (!settings.file.includes("{ext}")) warnings.push(t("warnNoExt"));
+        // 拡張子が抜けていないか（{ext:4} のような文字数制限つきの書き方も、{ext} として数えます）
+        if (!SMD.tokensIn(settings.file).includes("ext")) warnings.push(t("warnNoExt"));
 
         $("warning").textContent = warnings.join(" / ");
     };
 
-    /** 自動保存を遅らせるためのタイマー ID */
-    let saveTimer;
+    // ================================================================
+    // 保存
+    // ================================================================
+
+    let saveTimer = 0;
+    let statusTimer = 0;
 
     /**
-     * 表示を更新し、少し間を置いてから設定を保存する。
-     *
-     * 1 文字打つたびに保存すると storage.sync の書き込み回数制限に
-     * 引っかかるおそれがあるため、デバウンス（一定時間まとめる）しています。
+     * すぐに保存し、「保存しました」を短く表示する。
      *
      * @returns {void}
      */
-    const persist = () => {
-        update();
-
-        // 入力が続いている間はタイマーが作り直され、実際の保存は行われません。
+    const save = () => {
         clearTimeout(saveTimer);
+        saveTimer = 0;
 
-        saveTimer = setTimeout(async () => {
-            await api.storage.sync.set(readForm());
-
-            // 「保存しました」の表示を 1.2 秒だけ出します。
+        chrome.storage.sync.set(readForm()).then(() => {
             $("status").classList.add("show");
-            setTimeout(() => $("status").classList.remove("show"), 1200);
-        }, 400);
+            clearTimeout(statusTimer);
+            statusTimer = setTimeout(() => $("status").classList.remove("show"), 1200);
+        }, () => {});
+    };
+
+    /**
+     * 少し待ってから保存する（ファイル名の入力用）。
+     * 1 文字ごとに保存すると storage.sync の書き込み回数の上限に触れるおそれがあるためです。
+     *
+     * @returns {void}
+     */
+    const saveSoon = () => {
+        update();
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(save, 400);
     };
 
     // ================================================================
-    // ここから初期化処理（このファイルが読み込まれた直後に 1 回だけ実行）
+    // 初期化（このファイルが読み込まれた直後に 1 回だけ実行）
     // ================================================================
 
-    // <html lang="ja"> のように設定すると、フォントや折り返しの扱いが適切になります。
-    document.documentElement.lang = api.i18n.getUILanguage();
+    // <html lang="ja"> のように表示言語を設定すると、フォントや改行位置が適切になります。
+    // popup.html の data-i18n="キー" の要素には、翻訳文を流し込みます。
+    // バージョン表示は manifest.json の値をそのまま使うので、書き換え忘れがありません。
+    document.documentElement.lang = chrome.i18n.getUILanguage();
 
-    // popup.html 側に data-i18n="キー名" と書いておいた要素へ、翻訳文を流し込みます。
+    // このブラウザで使えない「同名ファイルがあるときの動作」は、選択肢から外します
+    // （Firefox は「保存先を尋ねる」に対応していないため）。
+    for (const option of [...$("conflictAction").options]) {
+        if (!SMD.CONFLICT_ACTIONS.includes(option.value)) option.remove();
+    }
     for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = t(el.dataset.i18n);
-
-    // manifest.json の version をそのまま表示します（更新時に書き換える手間が省けます）。
-    $("version").textContent = `v${api.runtime.getManifest().version}`;
+    $("version").textContent = `v${chrome.runtime.getManifest().version}`;
 
     // 変数一覧のボタンを組み立てます。
     $("placeholders").innerHTML = TOKENS.map(([group, tokens]) =>
@@ -221,37 +219,34 @@
         ).join("") + "</div>"
     ).join("");
 
-    // ボタン 1 個ずつにイベントを付けるのではなく、親要素で一括して受け取ります
-    // （イベント委譲と呼ばれる手法。要素が多いときに効率的です）。
+    // 変数ボタン: カーソル位置（選択範囲）に変数を挿入します。
+    // ボタン 1 個ずつではなく親要素でまとめて受け取り（イベント委譲）、closest で押されたボタンを探します。
+    // 表示用に "[ ]" と空けてある半角スペースは、挿入するときに取り除きます。
     $("placeholders").addEventListener("click", (e) => {
-        // closest でクリックされた場所から一番近い .token を探します。
-        // <code> や <span> をクリックしても正しくボタンを特定できます。
         const token = e.target.closest(".token")?.dataset.token;
         if (!token) return;
 
         const input = $("file");
-
-        // 表示用に "[ ]" と空けてある半角スペースは、挿入時には不要なので削除します。
-        // setRangeText は選択範囲を置き換えるメソッドで、
-        // 第 4 引数の "end" は「挿入した文字の直後へカーソルを移動」の意味です。
         input.setRangeText(token.replace(/ /g, ""), input.selectionStart, input.selectionEnd, "end");
-
-        input.focus(); // 続けて入力できるよう、フォーカスを入力欄へ戻します
-        persist();
+        input.focus();
+        saveSoon();
     });
 
-    // 「既定値に戻す」ボタン。
+    // 「既定値に戻す」ボタン
     $("reset").addEventListener("click", () => {
         writeForm(SMD.DEFAULTS);
-        persist();
+        save();
     });
 
-    // すべての設定項目の変更を監視します。
-    // input イベントは change と違い、1 文字入力するたびに発生します。
-    for (const id of Object.keys(FIELDS)) $(id).addEventListener("input", persist);
+    // ファイル名は入力が止まってから保存し、欄を離れたときはすぐ保存します。
+    // スイッチと選択肢は、押した瞬間に保存します。
+    $("file").addEventListener("input", saveSoon);
+    $("file").addEventListener("change", save);
+    for (const id of ["conflictAction", "alwaysSaveAs", "likeDownload"]) $(id).addEventListener("change", save);
 
-    // 保存済みの設定を読み込んで画面に反映します。
-    // get に DEFAULTS を渡すと、未保存の項目は自動的に既定値で埋まります。
-    // さらにスプレッドでも重ねているのは、項目が増えたときの取りこぼし防止です。
-    api.storage.sync.get(SMD.DEFAULTS).then((stored) => writeForm({ ...SMD.DEFAULTS, ...stored }));
+    // ポップアップは外をクリックしただけで閉じるので、保存待ちの入力があれば閉じる前に保存します。
+    addEventListener("pagehide", () => { if (saveTimer) save(); });
+
+    // 保存済みの設定を読み込んで画面に反映します（不正な値は既定値へ直したうえで）。
+    SMD.loadSettings().then(writeForm);
 })();

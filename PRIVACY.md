@@ -1,6 +1,6 @@
 # Privacy Policy / プライバシーポリシー
 
-**Last updated / 最終更新:** 2026-08-26
+**Last updated / 最終更新:** 2026-09-29
 
 > **Note on Language / 言語に関する注記**
 > このポリシーは英語で書いたものが正式版で、日本語訳は参考用です。両者の内容にズレがあった場合は英語版を優先します。
@@ -16,7 +16,8 @@
 | Is there a developer-owned server? / 開発者のサーバーはありますか？ | **No — none exists / ありません** |
 | Does it make network requests? / 外部と通信しますか？ | Yes, but only when a save is triggered — by the download button, or by a like if you enabled that — and only to Bluesky's public API and the author's PDS / はい。ただし保存が始まったときだけ（ダウンロードボタン、または有効にした場合はいいね）、Bluesky の公開 API と投稿者の PDS に対してのみ（§3） |
 | Does it use analytics or telemetry? / 解析・テレメトリはありますか？ | **No / ありません** |
-| Does it record what you view or save? / 閲覧・保存の履歴を記録しますか？ | **No / いいえ** |
+| Does it record what you view? / 閲覧の履歴を記録しますか？ | **No / いいえ** |
+| Does it record what you save? / 保存したものを記録しますか？ | Only which media items were saved (post ID and item number), plus the files still waiting while a save is running — on this device, until the browser closes, never synced or sent (§1.2) / どのメディアを保存したか（投稿 ID と何枚目か）と、保存中は保存待ちのファイルの一覧だけを、端末内に、ブラウザを閉じるまで。同期も送信もしません（§1.2） |
 | Where are settings stored? / 設定の保存先は？ | `storage.sync` — your browser profile / ブラウザのプロファイル内 |
 | Are settings synced across devices? / 端末間で同期されますか？ | **Yes**, via your browser account / **されます**（ブラウザのアカウント経由） |
 | Does it read the pages you visit? / 見ているページを読み取りますか？ | Only x.com / twitter.com / bsky.app, and only the parts described in §2 / x.com・twitter.com・bsky.app のみ、かつ §2 に書いた範囲だけ |
@@ -46,7 +47,7 @@ to be asked for. §3 sets out exactly which hosts are contacted, when, and why.
 
 #### 1.1 Saved to storage
 
-Four settings, and nothing else:
+Four settings:
 
 | Item | Example | Why |
 | :--- | :--- | :--- |
@@ -61,13 +62,55 @@ filename template you tuned on one machine is worth having on the next. It also 
 values pass through your browser vendor's sync service (Google or Mozilla), under their privacy
 policy, exactly as your bookmarks do.
 
-Nothing else is stored. No history of what you downloaded, no list of posts, no accounts you
-viewed, no URLs, no timestamps of your activity. In particular, **which posts you liked is not
-recorded anywhere that outlives the tab.** The save-on-like feature keeps a set of post IDs in
-page memory purely to avoid saving the same post twice, and that set is gone the moment you
-reload or close the tab.
+#### 1.2 Kept until you close the browser
 
-#### 1.2 Only ever in memory (never saved)
+To show which media you've already saved — the green check marks on the buttons — and to stop a
+like from saving the same files again, the Extension keeps one small record:
+
+| Item | Example | Why |
+| :--- | :--- | :--- |
+| Site and post ID | `x:1234567890123456789` | To recognise the post wherever it appears |
+| How many media items the post has | `4` | To tell "all saved" from "some saved" |
+| Which of those items were saved | `0, 2` (the 1st and 3rd) | To mark each item's button |
+
+That's the whole record. It holds no filenames, no URLs, no account names, no post text, no dates or
+times, and nothing that says whether a save came from a button or from a like.
+
+It lives in `chrome.storage.session` / `browser.storage.session`, which is:
+
+* **Never synced** to your other devices, and never sent anywhere.
+* **Held in memory by the browser**, not written to disk.
+* **Cleared when you close the browser**, and also whenever the Extension is updated, reloaded
+  or uninstalled.
+* **Kept apart for private windows.** If you allow the Extension in private / incognito windows,
+  saves made there go into a separate record that normal windows can't see, and that record is
+  cleared as soon as the last private window closes.
+* Capped at 3000 posts, oldest dropped first.
+
+There's no button to clear it earlier; closing the browser is how you clear it.
+
+**While a save is running**, the same session storage also holds the list of files still waiting to
+be saved, and the counter shown in the corner of the page. Browsers stop an idle background script
+at any time, and keeping these here is what lets a save carry on from where it was. For each waiting
+file, the list holds:
+
+* its download URL (an X media URL, or a Bluesky `getBlob` URL);
+* the file name built from your template — which includes the author's name, the post ID or the
+  post's text only if your template uses them;
+* the post ID and item number, and the save options (what to do on a name clash, whether to show
+  the save dialog).
+
+Each file is removed from the list as soon as it finishes. The whole list is cleared when you close
+the browser, and private-window entries as soon as the last private window closes. Like the record
+above, it's never synced and never sent anywhere.
+
+Nothing else is stored, and nothing in that list outlives the save. There's no lasting history of
+when or what you downloaded, no accounts you viewed, no timestamps of your activity. In particular, **which posts you liked is not recorded.** The
+save-on-like feature keeps a set of post IDs in page memory purely to avoid starting the same save
+twice, and that set is gone the moment you reload or close the tab. If a like does start a save, the
+record above notes only that the media was saved — exactly as if you had pressed the button.
+
+#### 1.3 Only ever in memory (never saved)
 
 | Item | Why |
 | :--- | :--- |
@@ -80,7 +123,7 @@ disappears when you close or reload the tab. The Bluesky cache holds at most 300
 in the service worker, which the browser stops whenever it's idle — so it often empties on its own
 within a minute. Neither is ever written to disk or sent anywhere.
 
-#### 1.3 The files you download
+#### 1.4 The files you download
 
 They go where your browser puts downloads, under the name your template produced. The Extension
 hands the URL and the filename to the browser's download API, then follows that one download until
@@ -88,18 +131,27 @@ it settles, so a failed transfer can be retried and a transfer that fails for go
 away instead of leaving a broken file behind. It looks the download up **by the numeric id it was
 just given**, and never lists, reads, or touches any other download. Beyond starting, following and
 cleaning up the downloads you asked for, the `downloads` permission isn't used for anything — and
-nothing about those downloads is stored or sent anywhere.
+apart from the saved-media record in §1.2, nothing about those downloads is stored or sent anywhere.
 
 ---
 
 ### 2. Permissions and site access
 
-Two permissions:
+Three permissions:
 
 | Permission | Why |
 | :--- | :--- |
 | **`downloads`** | To start the downloads you asked for, follow each one to completion, and retry or clear away the ones that fail. |
-| **`storage`** | To save and load the four settings above. |
+| **`storage`** | To save and load the four settings above, and to keep the saved-media record and the list of files waiting to be saved (§1.2) in session storage. |
+| **`alarms`** | To check on a running download every 30 seconds, and only while something is waiting to be saved — so a missed "finished" notice is caught, and a transfer that has stalled for three minutes is given up on, even after the browser has stopped the background script. |
+
+Two browser APIs that need no permission are also used, both only to keep open tabs in step:
+
+* **`tabs`** — to send the counter and saved-media updates to open x.com / twitter.com / bsky.app
+  tabs. Tabs are selected by those URL patterns; the Extension reads only each tab's numeric id and
+  whether it's a private tab — never its URL, title, or contents.
+* **`windows`** — to notice when the last private window has closed, so the private-window record
+  can be cleared.
 
 Content scripts run on these sites, and nowhere else:
 
@@ -181,6 +233,11 @@ governed by their own privacy policies, as is your browser vendor's handling of 
 
 ### 5. Keeping and deleting data
 
+The saved-media record and the list of files waiting to be saved (§1.2) are cleared when you close
+the browser — or, for private windows, when the last private window closes — and whenever the
+Extension is updated, reloaded or uninstalled. Waiting files also leave the list one by one as they
+finish. Neither ever reaches your other devices.
+
 Your four settings stay in your browser profile until you remove them. You can:
 
 * hit **Restore defaults** in the settings screen, or
@@ -239,7 +296,7 @@ Bluesky では、まともなファイル名を作るためのメタ情報を問
 
 #### 1.1 ストレージに保存するもの
 
-設定 4 つだけです。それ以外はありません。
+設定 4 つです。
 
 | 内容 | 例 | 理由 |
 | :--- | :--- | :--- |
@@ -254,12 +311,53 @@ Bluesky では、まともなファイル名を作るためのメタ情報を問
 同時にこれは、その 4 つの値がブックマークとまったく同じように、ブラウザベンダー
 （Google または Mozilla）の同期サービスを経由し、そのプライバシーポリシーの下に置かれることも意味します。
 
-これ以外は何も保存しません。ダウンロード履歴も、投稿の一覧も、閲覧したアカウントも、
-URL も、操作した日時も保存しません。とりわけ、**どの投稿にいいねしたかは、タブより長く残る形では
-どこにも記録されません**。いいね連動保存が投稿 ID の集合を持つのは、同じ投稿を二重に保存しない
-ためだけであり、その集合はページの再読み込みやタブを閉じた時点で消えます。
+#### 1.2 ブラウザを閉じるまで保持するもの
 
-#### 1.2 メモリ上だけで扱うもの（保存しない）
+保存済みのメディアを示す（ボタンを緑のチェックマークにする）ため、また、いいねで同じファイルを
+保存し直さないために、本拡張機能は小さな記録を 1 つだけ持ちます。
+
+| 内容 | 例 | 理由 |
+| :--- | :--- | :--- |
+| サイトと投稿 ID | `x:1234567890123456789` | どこに表示されても同じ投稿だと分かるようにするため |
+| 投稿内のメディア数 | `4` | 「全件保存済み」と「一部だけ保存済み」を区別するため |
+| そのうち保存済みのもの | `0, 2`（1 枚目と 3 枚目） | メディアごとのボタンに印を付けるため |
+
+記録はこれで全部です。ファイル名、URL、アカウント名、本文、日付や時刻は含まれず、
+保存のきっかけがボタンだったかいいねだったかも残りません。
+
+保存先は `chrome.storage.session` / `browser.storage.session` で、次の性質を持ちます。
+
+* **他の端末へは同期されず**、どこへも送信されません。
+* **ブラウザがメモリ上に保持**し、ディスクには書き出しません。
+* **ブラウザを閉じると消えます。** 拡張機能の更新・再読み込み・アンインストールでも消えます。
+* **シークレットウィンドウの分は別に持ちます。** シークレット（プライベート）ウィンドウでの
+  実行を許可している場合、そこでの保存は通常ウィンドウからは見えない別の記録に入り、
+  最後のシークレットウィンドウを閉じた時点で消えます。
+* 上限は 3000 投稿で、古いものから捨てます。
+
+これより早く消すボタンはありません。消したいときはブラウザを閉じてください。
+
+**保存を実行している間は**、同じセッションストレージに、保存待ちのファイルの一覧と、
+画面の隅に出すカウンターも置きます。ブラウザは暇なバックグラウンドをいつでも止めるため、
+ここに置いておくことで、止められても保存を続きから再開できるようにしています。
+保存待ちの 1 件ごとに持つのは次の情報です。
+
+* ダウンロード元の URL（X のメディア URL、または Bluesky の `getBlob` の URL）
+* テンプレートから組み立てた保存先のファイル名（テンプレートで使っている場合に限り、
+  投稿者の名前・投稿 ID・本文を含みます）
+* 投稿 ID と何枚目か、保存時の設定（同名時の動作、保存ダイアログを出すか）
+
+各ファイルは、保存が終わった時点で一覧から消えます。一覧全体はブラウザを閉じると消え、
+シークレットウィンドウの分は最後のシークレットウィンドウを閉じた時点で消えます。
+上の記録と同じく、同期もどこかへの送信もしません。
+
+これ以外は何も保存せず、この一覧も保存が終われば残りません。いつ・何をダウンロードしたかの
+履歴も、閲覧したアカウントも、操作した日時も残しません。とりわけ、**どの投稿にいいねしたかは記録しません**。
+いいね連動保存が投稿 ID の集合を持つのは、同じ保存を二重に始めないためだけであり、
+その集合はページの再読み込みやタブを閉じた時点で消えます。いいねで保存が始まった場合も、
+上の記録に残るのは「そのメディアを保存した」ことだけで、ボタンを押した場合と区別されません。
+
+#### 1.3 メモリ上だけで扱うもの（保存しない）
 
 | 内容 | 理由 |
 | :--- | :--- |
@@ -272,7 +370,7 @@ X 側のキャッシュは上限 2000 件で古い順に破棄され、ページ
 ブラウザはこれをアイドル状態で停止させるため、多くの場合 1 分以内に自然に空になります。
 どちらもディスクへ書き出されることも、どこかへ送信されることもありません。
 
-#### 1.3 ダウンロードしたファイル
+#### 1.4 ダウンロードしたファイル
 
 ブラウザが通常ダウンロードを置く場所へ、テンプレートが生成した名前で保存されます。
 本拡張機能は URL とファイル名をブラウザのダウンロード API へ渡したあと、その 1 件が
@@ -281,18 +379,27 @@ X 側のキャッシュは上限 2000 件で古い順に破棄され、ページ
 確認は**開始時に受け取ったダウンロード ID を指定して**行い、他のダウンロードを
 一覧したり読み取ったりすることはありません。`downloads` 権限を、あなたが指示した
 ダウンロードの開始・追跡・後片付け以外の目的で使うこともありません。
-その内容はどこにも保存も送信もされません。
+§1.2 の保存済みの記録を除き、その内容はどこにも保存も送信もされません。
 
 ---
 
 ### 2. 権限とサイトアクセス
 
-要求する権限は 2 つです。
+要求する権限は 3 つです。
 
 | 権限 | 理由 |
 | :--- | :--- |
 | **`downloads`** | 指示されたダウンロードを開始し、完了まで追跡し、失敗したものを再試行・後片付けするため |
-| **`storage`** | 上記 4 つの設定を保存・読み込みするため |
+| **`storage`** | 上記 4 つの設定を保存・読み込みするため、および保存済みの記録と保存待ちのファイルの一覧（§1.2）をセッションストレージに置くため |
+| **`alarms`** | 保存待ちがある間だけ、保存中のダウンロードを 30 秒ごとに確かめるため。ブラウザがバックグラウンドを止めた後でも、完了の知らせの取りこぼしを拾い、3 分間止まったままの転送を打ち切れるようにします |
+
+このほか、権限を必要としないブラウザ API を 2 つ使います。どちらも開いているタブの表示を
+そろえるためだけのものです。
+
+* **`tabs`** — カウンターと保存済みの更新を、開いている x.com / twitter.com / bsky.app のタブへ
+  送るため。タブはこれらの URL パターンで選び、読み取るのは各タブの番号とシークレットかどうかだけです。
+  URL・タイトル・内容は読みません。
+* **`windows`** — 最後のシークレットウィンドウが閉じたことを知り、シークレット側の記録を消すため。
 
 コンテンツスクリプトが動くのは以下のサイトだけです。
 
@@ -376,6 +483,10 @@ https://x.com/*        https://twitter.com/*        https://bsky.app/*
 ---
 
 ### 5. データの保持と削除
+
+保存済みの記録と保存待ちのファイルの一覧（§1.2）は、ブラウザを閉じた時点（シークレットウィンドウの分は、
+最後のシークレットウィンドウを閉じた時点）と、拡張機能の更新・再読み込み・アンインストール時に消えます。
+保存待ちのファイルは、保存が終わるたびに 1 件ずつ一覧から消えます。どちらも他の端末へ届くことはありません。
 
 設定 4 つは、消すまでブラウザのプロファイル内に残ります。消し方は 2 通りです。
 

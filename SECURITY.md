@@ -46,10 +46,12 @@ between it and the content script, the site adapters, the shared core, the filen
 background script, the settings page, and the manifest. Specifically:
 
 * Anything that lets a **crafted post** cause a download from a URL that isn't its own media —
-  bypassing either the `https://` check on message receipt or the one in the download handler, or
+  bypassing either the media-host check on message receipt or the one in the download handler, or
   getting past both.
-* Anything that lets a **page script** or another origin send a message that the content script
-  accepts as coming from the interceptor.
+* Anything that lets a **page script** or another origin get the content script to accept, as if it
+  came from the interceptor, a URL outside X's media hosts or a non-media file extension. (Page
+  scripts *can* post messages in the interceptor's format; the content script's validation is what
+  stands in the way.)
 * Anything that makes the filename renderer produce a path that escapes the download directory,
   or a filename containing characters it's supposed to strip. Segment trimming is what currently
   makes `..` impossible — a way around it is a real finding.
@@ -59,6 +61,9 @@ background script, the settings page, and the manifest. Specifically:
   doing anything.
 * Anything that causes the interceptor to retain or forward parts of an API response beyond the
   media URLs it's supposed to extract.
+* Anything that lets a page read the saved-media record, lets saves made in a private window show
+  up in a normal window, or keeps the record alive past the point [PRIVACY.md](PRIVACY.md) §1.2 says
+  it's cleared.
 
 **Out of scope**
 
@@ -127,10 +132,12 @@ write about it however you like — I'll publish the advisory with credit to you
 特に次のようなものが対象です。
 
 * **細工した投稿**によって、その投稿のメディア以外の URL からダウンロードを発生させられる経路。
-  メッセージ受信時の `https://` 検証、ダウンロード直前の検証、そのどちらか、
+  メッセージ受信時のメディアホストの検証、ダウンロード直前の検証、そのどちらか、
   あるいは両方をすり抜けるもの
-* **ページ側のスクリプト**や他のオリジンが、interceptor から来たものとして
-  コンテンツスクリプトに受理されるメッセージを送れる経路
+* **ページ側のスクリプト**や他のオリジンが、interceptor から来たものとして、X のメディア配信ホスト以外の
+  URL や、メディアではない拡張子をコンテンツスクリプトに受理させられる経路
+  （ページ側のスクリプトが interceptor と同じ形のメッセージを送ること自体は可能で、
+  それを止めているのはコンテンツスクリプト側の検証です）
 * ファイル名の生成処理が、ダウンロードフォルダの外へ出るパスや、
   除去されるはずの文字を含むファイル名を作ってしまう経路。
   現在 `..` を成立させないのは各階層の前後トリムなので、これを回避する方法は有効な報告です
@@ -139,6 +146,8 @@ write about it however you like — I'll publish the advisory with credit to you
   明言している部分です）
 * ユーザーが何もしていないのに、ページ側が保存済みの設定を読み書きできてしまうもの
 * interceptor が、抽出すべきメディア URL を超えて API レスポンスの一部を保持・転送してしまうもの
+* ページ側が保存済みの記録を読めてしまうもの、シークレットウィンドウでの保存が通常ウィンドウに
+  見えてしまうもの、[PRIVACY.md](PRIVACY.md) §1.2 で消えると書いた時点を過ぎても記録が残るもの
 
 **対象外**
 
