@@ -46,6 +46,9 @@ const X_MEDIA_HOSTS = new Set(["pbs.twimg.com", "video.twimg.com"]);
 /** Bluesky のメディアを取得するエンドポイントのパス（ホストは投稿者ごとの PDS） */
 const BSKY_BLOB_PATH = "/xrpc/com.atproto.sync.getBlob";
 
+/** ポイピクの画像を配信しているホスト */
+const POIPIKU_MEDIA_HOST = "cdn.poipiku.com";
+
 /**
  * このブラウザの downloads API が受け付ける conflictAction の値。
  * Firefox は "prompt"（保存先を尋ねる）を実装しておらず、指定するとエラーになるため外します。
@@ -77,7 +80,7 @@ const FATAL = new Set([
 ]);
 
 /** 状態の変化を知らせる先のタブ。manifest.json の content_scripts と同じ範囲です */
-const TAB_URLS = ["https://x.com/*", "https://twitter.com/*", "https://bsky.app/*"];
+const TAB_URLS = ["https://x.com/*", "https://twitter.com/*", "https://bsky.app/*", "https://poipiku.com/*"];
 
 /** 待ちが 0 になってから、カウンターを表示し続ける時間（ミリ秒） */
 const LINGER = 5000;
@@ -88,6 +91,7 @@ const HISTORY_LIMIT = 3000;
 /**
  * 1 投稿のメディア数として受け付ける上限。保存済みの番号を 32 ビットの数値で持つため 32 までです
  * （X も Bluesky も、実際は 1 投稿 4 件まで）。
+ * これを超える投稿（ポイピクでは起こり得ます）も保存はできますが、保存済みとしては記録しません。
  */
 const MAX_MEDIA = 32;
 
@@ -276,7 +280,7 @@ const postOf = (did, rkey) => once(`post:${did}/${rkey}`, async () => {
  *
  * X の URL は、ページ内のスクリプトが偽のメッセージで差し込める経路があるため、
  * X のメディア配信ホストだけに絞ります。Bluesky は投稿者の PDS（任意の https ホスト）から
- * 取得するので、ホストではなく getBlob のパスで判断します。
+ * 取得するので、ホストではなく getBlob のパスで判断します。ポイピクは画像の配信ホストだけに絞ります。
  * URL.parse は、解析できなければ例外ではなく null を返すので、1 回の解析で済みます。
  *
  * @param {unknown} url
@@ -285,7 +289,8 @@ const postOf = (did, rkey) => once(`post:${did}/${rkey}`, async () => {
 const isMediaUrl = (url) => {
     const parsed = typeof url === "string" ? URL.parse(url) : null;
     return parsed !== null && parsed.protocol === "https:"
-        && (X_MEDIA_HOSTS.has(parsed.hostname) || parsed.pathname === BSKY_BLOB_PATH);
+        && (X_MEDIA_HOSTS.has(parsed.hostname) || parsed.pathname === BSKY_BLOB_PATH
+            || parsed.hostname === POIPIKU_MEDIA_HOST);
 };
 
 /**
@@ -426,7 +431,7 @@ const record = (all, key, index, total) => {
 const ctxOf = (sender) => (sender?.tab?.incognito ? "i" : "n");
 
 /**
- * 同じ種類のウィンドウで開いている X / Bluesky のタブすべてへメッセージを送る。
+ * 同じ種類のウィンドウで開いている X / Bluesky / ポイピクのタブすべてへメッセージを送る。
  *
  * @param {"n"|"i"} ctx
  * @param {object} message

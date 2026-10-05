@@ -178,7 +178,7 @@ globalThis.SMD = (() => {
 
     /** メディア種別・サイト名をファイル名向けの短い表記へ */
     const KIND = { photo: "img", video: "vid", animated_gif: "gif" };
-    const SITE = { x: "x", bluesky: "bsky" };
+    const SITE = { x: "x", bluesky: "bsky", poipiku: "poipiku" };
 
     /** 日時が取れなかったときの「全部空文字」の日時変数 */
     const NO_DATE = { yyyy: "", mm: "", dd: "", hh: "", mi: "", ss: "", date: "", time: "", datetime: "" };

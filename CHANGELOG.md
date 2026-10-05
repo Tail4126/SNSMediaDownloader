@@ -9,6 +9,32 @@
 
 ## [未リリース]
 
+## [1.4.0] - 2026-10-05
+
+### 追加
+
+**ポイピク対応**
+
+- ポイピク（poipiku.com）の投稿詳細ページ（`/{ユーザーID}/{投稿ID}.html`）に、ダウンロードボタンを
+  付けるようにした。一覧・タイムラインには付けない。メインボタンは共有・ブックマークの並びに置き、
+  画像が 2 枚以上なら各サムネイルに個別ボタンも付ける。
+- 原寸画像は、ページ自身が画像の拡大表示に使う `/f/ShowIllustDetailF.jsp` に同じリクエストを
+  保存時に 1 回だけ送り、返ってきた署名付き URL（`cdn.poipiku.com`）から保存する。
+  サムネイルとはファイル名で突き合わせる。
+- パスワード・フォロワー限定・年齢制限・ワンクッションの投稿は、画面で閲覧できている（自分で解除済みの）
+  画像だけを保存する。解除の操作を代わりに行うことはなく、ロック中の代わりの画像（`/img/…`）は対象外。
+- `{site}` は `poipiku`、`{user}` は数値のユーザー ID、`{name}` は表示名、`{id}` は投稿 ID、
+  `{media_id}` はファイル名。投稿日時はページに無いため、日時の変数は空になる。
+- いいね連動保存は、ポイピクでは絵文字リアクションのボタンに連動する（既定はオフのまま）。
+- 文言 `sitePoipiku` を 9 言語すべてに追加し、`extDesc` / `labelLikeDownload` / `phSite` をポイピクに合わせて更新。
+  設定画面のプレビューにポイピクのサンプルを追加（4 件 → 5 件）。
+- 権限に `https://poipiku.com/*` と `https://cdn.poipiku.com/*` を追加。
+
+### 修正
+
+- メディアが 33 件以上ある投稿で、32 番目以降のボタンが別の番号の保存済み状態を参照しうる問題を修正
+  （シフト量が 32 で割った余りになるため）。33 件以上の投稿は保存はできるが、保存済みとしては記録しない。
+
 ## [1.3.0] - 2026-09-29
 
 ### 追加
@@ -509,7 +535,8 @@
 
 </details>
 
-[未リリース]: https://github.com/Tail4126/SNSMediaDownloader/compare/v1.3.0...HEAD
+[未リリース]: https://github.com/Tail4126/SNSMediaDownloader/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/Tail4126/SNSMediaDownloader/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/Tail4126/SNSMediaDownloader/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Tail4126/SNSMediaDownloader/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Tail4126/SNSMediaDownloader/compare/v1.0.2...v1.1.0

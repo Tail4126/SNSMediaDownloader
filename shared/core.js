@@ -33,7 +33,7 @@ globalThis.SMDCore = (() => {
 
     /**
      * @typedef {object} PostInfo 投稿 1 件の情報
-     * @property {"x"|"bluesky"} site - サイト
+     * @property {"x"|"bluesky"|"poipiku"} site - サイト
      * @property {string} screenName - ユーザー名 / ハンドル
      * @property {string} postId - 投稿 ID
      * @property {string} name - 表示名
@@ -52,7 +52,7 @@ globalThis.SMDCore = (() => {
 
     /**
      * @typedef {object} SiteAdapter サイトごとの差分を吸収するオブジェクト
-     * @property {"x"|"bluesky"} site - サイト。保存済みの記録のキーと、CSS のアクセント色の切り替えに使う
+     * @property {"x"|"bluesky"|"poipiku"} site - サイト。保存済みの記録のキーと、CSS のアクセント色の切り替えに使う
      * @property {string} postRoot - 投稿 1 件のコンテナを選ぶ CSS セレクタ
      * @property {(root: Element) => Element[]} mediaContainers - メディアを包む要素（画面の並び順）
      * @property {(root: Element) => string|null} postId
@@ -211,10 +211,11 @@ globalThis.SMDCore = (() => {
      * n 番目のビットが立っているか。
      *
      * @param {number} mask
-     * @param {number} n - 0 始まり（0〜31）
+     * @param {number} n - 0 始まり。記録できるのは 0〜31 だけなので、32 以上はいつも false
+     *   （シフト量は 32 で割った余りになるため、そのまま調べると別の番号のビットを見てしまいます）
      * @returns {boolean}
      */
-    const hasBit = (mask, n) => ((mask >>> n) & 1) === 1;
+    const hasBit = (mask, n) => n >= 0 && n < 32 && ((mask >>> n) & 1) === 1;
 
     /**
      * 立っているビットの数を数える（保存済みの件数）。

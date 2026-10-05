@@ -97,8 +97,9 @@
     const blob = (cid) => `https://bsky.social/xrpc/com.atproto.sync.getBlob?did=did%3Aplc%3Aexample&cid=${cid}`;
 
     /**
-     * プレビューに出す 4 パターンのサンプル（X / Bluesky × 画像 / 動画）。
+     * プレビューに出す 5 パターンのサンプル（X / Bluesky × 画像 / 動画、ポイピクの画像）。
      * 「複数枚のとき」と「1 枚のとき」の違い（{n?} など）も確かめられるようにしてあります。
+     * ポイピクは投稿日時が取れないので、日時の変数が空になる様子も確かめられます。
      */
     const SAMPLES = [
         [`X · ${t("sampleImage24")}`, {
@@ -126,6 +127,12 @@
                 postId: "3lbz9m4tq2k2h", text: t("sampleVideoText"), time: "2026-08-18T22:40:10+09:00" },
             item: { url: blob("bafkreixyz0123456789"), kind: "video", ext: "mp4",
                 id: "bafkreixyz0123456789", res: "1920x1080", index: 1, total: 1 },
+        }],
+        [`${t("sitePoipiku")} · ${t("sampleImage24")}`, {
+            post: { site: "poipiku", screenName: "1234567", name: t("sampleUserName"),
+                postId: "12345678", text: t("sampleText"), time: null },
+            item: { url: "https://cdn.poipiku.com/001234567/012345678_012345679_AbCdEfGhI.png",
+                kind: "photo", ext: "png", id: "012345678_012345679_AbCdEfGhI", res: "", index: 2, total: 4 },
         }],
     ];
 
