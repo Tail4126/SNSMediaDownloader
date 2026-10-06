@@ -164,7 +164,7 @@ On those pages the Extension looks at the post structure — the media elements,
 author link, the post text and timestamp — in order to place a button and build a filename. It does
 not touch form inputs, cookies, credentials, direct messages, or account settings, and it has no
 interest in pages that aren't posts. On Poipiku it does nothing outside a post's own page
-(`/{user}/{post}.html`) and the こそフォロ list (`/MyHomePcV.jsp`), and it never enters a password or
+(`/{user}/{post}.html`) and the こそフォロ / フォロータグ lists (`/MyHomePcV.jsp`, `/MyHomeTagPcV.jsp`), and it never enters a password or
 unlocks a post for you. The one form input it reads is a password-protected post's password box,
 and only when you save that post: its value goes into the same request the page itself sends (§3).
 
@@ -204,7 +204,7 @@ switched that on:
 | `public.api.bsky.app` | Saving a Bluesky post | The post's AT-URI (its author DID and post ID), or a handle to resolve | To fetch the post's text, timestamp, MIME type and aspect ratio |
 | `plc.directory` | First save for a given account | The author's DID | To find which server that account's files live on |
 | The author's PDS (usually `bsky.social`) | Saving a Bluesky file | The author's DID and the file's CID | To fetch the file itself |
-| `poipiku.com` (`/f/ShowIllustDetailF.jsp`) | Saving a Poipiku post, on that post's own page or in the こそフォロ list — one POST per save | The author's user ID and the post ID — and, for a password-protected post, whatever is in that post's password box (normally the password you typed to open it; empty for every other post), exactly as the page sends it | To get the signed full-size image URLs |
+| `poipiku.com` (`/f/ShowIllustDetailF.jsp`) | Saving a Poipiku post, on that post's own page or in the こそフォロ / フォロータグ lists — one POST per save | The author's user ID and the post ID — and, for a password-protected post, whatever is in that post's password box (normally the password you typed to open it; empty for every other post), exactly as the page sends it | To get the signed full-size image URLs |
 
 The three Bluesky endpoints are public and unauthenticated. No credentials, no cookies of yours, no
 identifier of any kind, and nothing about you is attached — the requests say only "which post is
@@ -428,7 +428,7 @@ https://x.com/*        https://twitter.com/*        https://bsky.app/*        ht
 本文、投稿日時）だけです。ボタンを置き、ファイル名を組み立てるために必要な範囲に限られます。
 フォーム入力、Cookie、認証情報、ダイレクトメッセージ、アカウント設定には触れませんし、
 投稿ではないページには関心がありません。ポイピクでは投稿の個別ページ（`/{user}/{post}.html`）と
-こそフォロの一覧（`/MyHomePcV.jsp`）の外では何もせず、パスワードを入力したり、代わりに鍵を開けたりもしません。
+こそフォロ・フォロータグの一覧（`/MyHomePcV.jsp`・`/MyHomeTagPcV.jsp`）の外では何もせず、パスワードを入力したり、代わりに鍵を開けたりもしません。
 例外として読むフォーム入力は、パスワード付き投稿のパスワード欄だけです。その投稿を保存するときに限り、
 ページ自身が送るのと同じリクエストに、その値を入れて送ります（§3）。
 
@@ -469,7 +469,7 @@ https://x.com/*        https://twitter.com/*        https://bsky.app/*        ht
 | `public.api.bsky.app` | Bluesky の投稿を保存するとき | 投稿の AT-URI（投稿者 DID と投稿 ID）、または解決するハンドル | 本文・投稿日時・MIME タイプ・アスペクト比を取得するため |
 | `plc.directory` | そのアカウントについて初回の保存時 | 投稿者の DID | そのアカウントのファイルがどのサーバーにあるかを調べるため |
 | 投稿者の PDS（多くは `bsky.social`） | Bluesky のファイルを保存するとき | 投稿者の DID とファイルの CID | ファイル本体を取得するため |
-| `poipiku.com`（`/f/ShowIllustDetailF.jsp`） | ポイピクの投稿を、その個別ページかこそフォロの一覧で保存するとき。保存 1 回につき POST 1 回 | 投稿者のユーザー ID と投稿 ID。パスワード付きの投稿では、その投稿のパスワード欄に入っている値（通常は開くときに自分で入力したパスワード。それ以外の投稿では空）も、ページと同じように送ります | 原寸画像の署名付き URL を受け取るため |
+| `poipiku.com`（`/f/ShowIllustDetailF.jsp`） | ポイピクの投稿を、その個別ページか、こそフォロ・フォロータグの一覧で保存するとき。保存 1 回につき POST 1 回 | 投稿者のユーザー ID と投稿 ID。パスワード付きの投稿では、その投稿のパスワード欄に入っている値（通常は開くときに自分で入力したパスワード。それ以外の投稿では空）も、ページと同じように送ります | 原寸画像の署名付き URL を受け取るため |
 
 Bluesky の 3 つは公開・認証不要のエンドポイントです。認証情報も、あなたの Cookie も、
 いかなる識別子も、あなたに関する情報も一切付与しません。

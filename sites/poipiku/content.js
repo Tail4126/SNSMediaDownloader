@@ -2,8 +2,8 @@
 /**
  * sites/poipiku/content.js
  * ==================================================================
- * ポイピク用のアダプタ。投稿詳細ページ（/{ユーザーID}/{投稿ID}.html）と、こそフォロの一覧
- * （/MyHomePcV.jsp）で動きます。どちらも投稿 1 件ごとに同じ形の枠（.IllustItem）が並びます。
+ * ポイピク用のアダプタ。投稿詳細ページ（/{ユーザーID}/{投稿ID}.html）と、こそフォロ・フォロータグの一覧
+ * （/MyHomePcV.jsp・/MyHomeTagPcV.jsp）で動きます。どちらも投稿 1 件ごとに同じ形の枠（.IllustItem）が並びます。
  *
  * 画面のサムネイル（…/{ファイル名}_640.jpg）は縮小版で、原寸画像は CloudFront の署名付き URL
  * （…/{ファイル名}?Expires=…&Signature=…）でしか取得できません。署名付き URL は、ページ自身が
@@ -26,8 +26,10 @@
      * ボタンを付けるページのパス。
      *   - 投稿詳細ページ … /{ユーザーID}/{投稿ID}.html
      *   - こそフォロの一覧 … /MyHomePcV.jsp（?PG=1 などのページ送りも同じパス）
+     *   - フォロータグの一覧 … /MyHomeTagPcV.jsp
+     * お気に入り（/MyBookmarkListPcV.jsp）は作りが違う（.IllustThumb の格子）ので対象外です。
      */
-    const PAGES = [/^\/\d+\/\d+\.html$/, /^\/MyHomePcV\.jsp$/];
+    const PAGES = [/^\/\d+\/\d+\.html$/, /^\/MyHome(?:Tag)?PcV\.jsp$/];
 
     // それ以外のページ（新着・ユーザーページなど）では動かしません。
     if (!PAGES.some((re) => re.test(location.pathname))) return;
@@ -57,11 +59,19 @@
     const OVERLAY = "#DetailOverlay";
 
     /**
-     * ページ内に表示された署名付き URL。原寸画像のパス → URL（表示された順）。
+     * ページ内に表示された署名付き URL。原寸画像のパス → { URL, どの投稿のものか }（表示された順）。
      * 拡大表示を閉じても保存できるよう、一度見えたものは覚えておきます。
-     * @type {Map<string, string>}
+     * @type {Map<string, {url: string, cid: string|null}>}
      */
     const shownSigned = new Map();
+
+    /**
+     * 最後にサムネイルを押して拡大表示を開いた投稿の ID。
+     * ファイル名の先頭の数字は投稿 ID と一致しないこと（別の投稿の画像の使い回しなど）があるため、
+     * 拡大表示に出た画像がどの投稿のものかは、開いた操作から判断します。
+     * @type {string|null}
+     */
+    let openedCid = null;
 
     /**
      * Firefox では content.fetch がページ側の fetch で、Cookie もページと同じように扱われます。
@@ -90,16 +100,30 @@
     const postId = (root) => /^IllustItem_(\d+)$/.exec(root.id)?.[1] ?? null;
 
     /**
-     * 原寸画像のパスが、その投稿のものか。ファイル名は「{投稿ID（0 埋め）}_…」で始まります。
+     * 拡大表示に出た画像の持ち主（投稿 ID）を決める。
+     *   1. サムネイルを押して開いたなら、その投稿
+     *   2. ページに投稿が 1 件しかない（詳細ページ）なら、その投稿
+     *   3. それ以外は、ファイル名の先頭の数字（多くの場合は投稿 ID と同じ）
+     *
+     * @param {string} path
+     * @returns {string|null}
+     */
+    const ownerOf = (path) => {
+        if (openedCid) return openedCid;
+        const roots = document.querySelectorAll(POST_ROOT);
+        if (roots.length === 1) return postId(roots[0]);
+        const head = /^\/\d+\/(\d+)_/.exec(path)?.[1];
+        return head ? String(Number(head)) : null;
+    };
+
+    /**
+     * 原寸画像のパスが、ページ内で見えたその投稿の画像か。
      *
      * @param {string} path
      * @param {string|null} cid - 投稿 ID
      * @returns {boolean}
      */
-    const belongsTo = (path, cid) => {
-        const head = /^\/\d+\/(\d+)_/.exec(path)?.[1];
-        return head !== undefined && cid !== null && Number(head) === Number(cid);
-    };
+    const belongsTo = (path, cid) => cid !== null && shownSigned.get(path)?.cid === cid;
 
     /**
      * ページ内に表示された署名付き画像を拾って覚える。
@@ -111,7 +135,7 @@
         for (const img of document.querySelectorAll(SIGNED_IMG)) {
             const path = filePath(img.src);
             if (path && !shownSigned.has(path)) {
-                shownSigned.set(path, img.src);
+                shownSigned.set(path, { url: img.src, cid: ownerOf(path) });
                 added = true;
             }
         }
@@ -264,7 +288,7 @@
         if (shown.length === 0) return [];
 
         // ページ内で見えていた署名付き URL を優先し、足りないときだけ問い合わせます。
-        const urls = new Map(shownSigned);
+        const urls = new Map([...shownSigned].map(([path, { url }]) => [path, url]));
         if (shown.some(({ path }) => !urls.has(path))) {
             for (const [path, url] of await signedUrls(post.screenName, post.postId, passwordOf(root))) {
                 if (!urls.has(path)) urls.set(path, url);
@@ -293,6 +317,12 @@
             };
         });
     };
+
+    // サムネイルが押されたら、どの投稿の拡大表示かを覚えておきます（見るだけで、クリックには手を触れません）。
+    document.addEventListener("click", (e) => {
+        const root = e.target instanceof Element ? e.target.closest("a.IllustItemThumb")?.closest(POST_ROOT) : null;
+        if (root) openedCid = postId(root);
+    }, true);
 
     collectShown();
 
