@@ -1,6 +1,6 @@
 # Privacy Policy / プライバシーポリシー
 
-**Last updated / 最終更新:** 2026-09-29
+**Last updated / 最終更新:** 2026-10-06
 
 > **Note on Language / 言語に関する注記**
 > このポリシーは英語で書いたものが正式版で、日本語訳は参考用です。両者の内容にズレがあった場合は英語版を優先します。
@@ -14,13 +14,13 @@
 | :--- | :--- |
 | Does it collect personal data? / 個人情報を収集しますか？ | **No / いいえ** |
 | Is there a developer-owned server? / 開発者のサーバーはありますか？ | **No — none exists / ありません** |
-| Does it make network requests? / 外部と通信しますか？ | Yes, but only when a save is triggered — by the download button, or by a like if you enabled that — and only to Bluesky's public API and the author's PDS / はい。ただし保存が始まったときだけ（ダウンロードボタン、または有効にした場合はいいね）、Bluesky の公開 API と投稿者の PDS に対してのみ（§3） |
+| Does it make network requests? / 外部と通信しますか？ | Yes, but only when a save is triggered — by the download button, or by a like if you enabled that — and only to Bluesky's public API and the author's PDS, or, on Poipiku, to `poipiku.com` itself (§3) / はい。ただし保存が始まったときだけ（ダウンロードボタン、または有効にした場合はいいね）、Bluesky の公開 API と投稿者の PDS、ポイピクでは `poipiku.com` 自身に対してのみ（§3） |
 | Does it use analytics or telemetry? / 解析・テレメトリはありますか？ | **No / ありません** |
 | Does it record what you view? / 閲覧の履歴を記録しますか？ | **No / いいえ** |
 | Does it record what you save? / 保存したものを記録しますか？ | Only which media items were saved (post ID and item number), plus the files still waiting while a save is running — on this device, until the browser closes, never synced or sent (§1.2) / どのメディアを保存したか（投稿 ID と何枚目か）と、保存中は保存待ちのファイルの一覧だけを、端末内に、ブラウザを閉じるまで。同期も送信もしません（§1.2） |
 | Where are settings stored? / 設定の保存先は？ | `storage.sync` — your browser profile / ブラウザのプロファイル内 |
 | Are settings synced across devices? / 端末間で同期されますか？ | **Yes**, via your browser account / **されます**（ブラウザのアカウント経由） |
-| Does it read the pages you visit? / 見ているページを読み取りますか？ | Only x.com / twitter.com / bsky.app, and only the parts described in §2 / x.com・twitter.com・bsky.app のみ、かつ §2 に書いた範囲だけ |
+| Does it read the pages you visit? / 見ているページを読み取りますか？ | Only x.com / twitter.com / bsky.app / poipiku.com, and only the parts described in §2 / x.com・twitter.com・bsky.app・poipiku.com のみ、かつ §2 に書いた範囲だけ |
 | Does it load remote code? / 外部コードを読み込みますか？ | **No / いいえ** |
 | Can I delete everything? / 完全に削除できますか？ | Yes — uninstalling removes all data / はい。アンインストールで全て消えます |
 
@@ -38,8 +38,8 @@ component that receives anything from you. Everything it does happens on your de
 code it runs is what's bundled inside the extension itself.
 
 It is not, however, a zero-network extension, and it would be dishonest to describe it that way.
-Downloading a file means fetching it, and on Bluesky the metadata that makes a good filename has
-to be asked for. §3 sets out exactly which hosts are contacted, when, and why.
+Downloading a file means fetching it, on Bluesky the metadata that makes a good filename has
+to be asked for, and on Poipiku the full-size image's address has to be asked for. §3 sets out exactly which hosts are contacted, when, and why.
 
 ---
 
@@ -51,7 +51,7 @@ Four settings:
 
 | Item | Example | Why |
 | :--- | :--- | :--- |
-| Filename template | `{site}/{user}-{id}-{datetime}-{kind}{n}.{ext}` | So your files are named the way you asked |
+| Filename template | `{site}/{user}-{id}[-{datetime}]-{kind}{n}.{ext}` | So your files are named the way you asked |
 | Conflict behaviour | `uniquify` / `overwrite` / `prompt` | Passed to the browser's download API |
 | Always show the save dialog | `true` / `false` | Passed to the browser's download API |
 | Download when you like a post | `true` / `false` | Whether liking a post also starts a save. Defaults to `false` |
@@ -69,7 +69,7 @@ like from saving the same files again, the Extension keeps one small record:
 
 | Item | Example | Why |
 | :--- | :--- | :--- |
-| Site and post ID | `x:1234567890123456789` | To recognise the post wherever it appears |
+| Site and post ID | `x:1234567890123456789` (or `bluesky:…`, `poipiku:<postId>`) | To recognise the post wherever it appears |
 | How many media items the post has | `4` | To tell "all saved" from "some saved" |
 | Which of those items were saved | `0, 2` (the 1st and 3rd) | To mark each item's button |
 
@@ -94,7 +94,7 @@ be saved, and the counter shown in the corner of the page. Browsers stop an idle
 at any time, and keeping these here is what lets a save carry on from where it was. For each waiting
 file, the list holds:
 
-* its download URL (an X media URL, or a Bluesky `getBlob` URL);
+* its download URL (an X media URL, a Bluesky `getBlob` URL, or a signed `cdn.poipiku.com` image URL);
 * the file name built from your template — which includes the author's name, the post ID or the
   post's text only if your template uses them;
 * the post ID and item number, and the save options (what to do on a name clash, whether to show
@@ -116,6 +116,7 @@ record above notes only that the media was saved — exactly as if you had press
 | :--- | :--- |
 | Media URLs harvested from X's API responses | So a video's real URL is known when you press save |
 | Bluesky post records and resolved PDS addresses | So the filename can include the post's text, date and resolution |
+| Signed full-size image URLs returned by Poipiku | To download the originals rather than the 640-pixel previews; used for that one save and then discarded |
 | The post's author, ID, text and timestamp | To fill in the filename template |
 
 The X cache holds at most 2000 entries and is discarded oldest-first; it lives in the page and
@@ -147,8 +148,8 @@ Three permissions:
 
 Two browser APIs that need no permission are also used, both only to keep open tabs in step:
 
-* **`tabs`** — to send the counter and saved-media updates to open x.com / twitter.com / bsky.app
-  tabs. Tabs are selected by those URL patterns; the Extension reads only each tab's numeric id and
+* **`tabs`** — to send the counter and saved-media updates to open x.com / twitter.com / bsky.app /
+  poipiku.com tabs. Tabs are selected by those URL patterns; the Extension reads only each tab's numeric id and
   whether it's a private tab — never its URL, title, or contents.
 * **`windows`** — to notice when the last private window has closed, so the private-window record
   can be cleared.
@@ -156,16 +157,19 @@ Two browser APIs that need no permission are also used, both only to keep open t
 Content scripts run on these sites, and nowhere else:
 
 ```
-https://x.com/*        https://twitter.com/*        https://bsky.app/*
+https://x.com/*        https://twitter.com/*        https://bsky.app/*        https://poipiku.com/*
 ```
 
 On those pages the Extension looks at the post structure — the media elements, the action bar, the
 author link, the post text and timestamp — in order to place a button and build a filename. It does
 not touch form inputs, cookies, credentials, direct messages, or account settings, and it has no
-interest in pages that aren't posts.
+interest in pages that aren't posts. On Poipiku it does nothing outside a post's own page
+(`/{user}/{post}.html`) and the こそフォロ / フォロータグ lists (`/MyHomePcV.jsp`, `/MyHomeTagPcV.jsp`), and it never enters a password or
+unlocks a post for you. The one form input it reads is a password-protected post's password box,
+and only when you save that post: its value goes into the same request the page itself sends (§3).
 
 When **Also download when you like a post** is switched on, the Extension additionally listens for
-clicks on the site's like button so it knows when to start a save. It only observes: it never
+clicks on the site's like button (on Poipiku, the emoji reaction buttons) so it knows when to start a save. It only observes: it never
 clicks, cancels, or alters a like, and it cannot see likes you made on another device or before it
 was installed. With the setting off — which is how it ships — the listener does nothing at all.
 
@@ -181,8 +185,8 @@ in a DM endpoint — none of it is read out, stored, or transmitted. The result 
 except as a `postMessage` to this Extension's own content script, sent with `location.origin` as
 the target so no other origin can receive it. Nothing is written to disk.
 
-`host_permissions` covers `x.com`, `twitter.com`, `bsky.app`, `public.api.bsky.app` and
-`plc.directory` — and nothing else. That narrowness is why a Bluesky account self-hosting under a
+`host_permissions` covers `x.com`, `twitter.com`, `bsky.app`, `public.api.bsky.app`,
+`plc.directory`, `poipiku.com` and `cdn.poipiku.com` — and nothing else. That narrowness is why a Bluesky account self-hosting under a
 `did:web` identity can't be resolved: fetching its DID document would require read access to
 arbitrary domains, and that trade isn't worth making by default.
 
@@ -190,22 +194,33 @@ arbitrary domains, and that trade isn't worth making by default.
 
 ### 3. Network requests
 
-The Extension itself makes requests to exactly three kinds of host, all of them Bluesky
-infrastructure, and all of them **only after a save has been triggered** — by pressing a download
-button, or by liking a post if you switched that on:
+The Extension itself makes requests to exactly four kinds of host — three of them Bluesky
+infrastructure, plus Poipiku itself — and all of them **only after a save has been triggered** — by
+pressing a download button, or by liking a post (sending an emoji reaction, on Poipiku) if you
+switched that on:
 
 | Host | When | What is sent | Why |
 | :--- | :--- | :--- | :--- |
 | `public.api.bsky.app` | Saving a Bluesky post | The post's AT-URI (its author DID and post ID), or a handle to resolve | To fetch the post's text, timestamp, MIME type and aspect ratio |
 | `plc.directory` | First save for a given account | The author's DID | To find which server that account's files live on |
 | The author's PDS (usually `bsky.social`) | Saving a Bluesky file | The author's DID and the file's CID | To fetch the file itself |
+| `poipiku.com` (`/f/ShowIllustDetailF.jsp`) | Saving a Poipiku post, on that post's own page or in the こそフォロ / フォロータグ lists — one POST per save | The author's user ID and the post ID — and, for a password-protected post, whatever is in that post's password box (normally the password you typed to open it; empty for every other post), exactly as the page sends it | To get the signed full-size image URLs |
 
-All three are public, unauthenticated endpoints. No credentials, no cookies of yours, no
+The three Bluesky endpoints are public and unauthenticated. No credentials, no cookies of yours, no
 identifier of any kind, and nothing about you is attached — the requests say only "which post is
 this" and "give me this file", and would look identical coming from anyone.
 
+The Poipiku request is different, and worth spelling out. It is the same request the Poipiku page
+itself makes when you click an image to enlarge it, sent from the post page by the content script.
+Because it goes to `poipiku.com` from a `poipiku.com` page, your browser attaches your own Poipiku
+cookies (your session) to it, exactly as it does for the page's own request — that's what lets
+Poipiku hand out full-size URLs for posts you're signed in to see. The Extension doesn't read, store,
+or send those cookies anywhere else; it never sees them. The reply is used only to pick out the
+image URLs, and nothing from it is kept after the save.
+
 The download of the file itself is performed by your browser's download manager against the media
-host (`pbs.twimg.com`, `video.twimg.com`, or the PDS), exactly as if you had opened that URL.
+host (`pbs.twimg.com`, `video.twimg.com`, the PDS, or `cdn.poipiku.com`), exactly as if you had
+opened that URL.
 
 **On X the Extension makes no requests of its own at all.** It only reads responses the page had
 already received for its own reasons.
@@ -225,7 +240,7 @@ Beyond that:
 There's nothing to share, sell, or hand over, because nothing is collected in the first place —
 including in a business transfer scenario.
 
-The Extension isn't acting as a data processor for X or Bluesky. Using those services is still
+The Extension isn't acting as a data processor for X, Bluesky or Poipiku. Using those services is still
 governed by their own privacy policies, as is your browser vendor's handling of synced settings
 (§1.1).
 
@@ -287,7 +302,8 @@ Questions, privacy concerns, bug reports — open a GitHub issue.
 
 ただし「通信を一切行わない拡張機能」ではありませんし、そう説明するのは不誠実です。
 ファイルをダウンロードすることは、そのファイルを取得することそのものですし、
-Bluesky では、まともなファイル名を作るためのメタ情報を問い合わせる必要があります。
+Bluesky では、まともなファイル名を作るためのメタ情報を、ポイピクでは原寸画像の URL を
+問い合わせる必要があります。
 どのホストに、いつ、なぜ接続するのかは §3 に列挙します。
 
 ---
@@ -300,7 +316,7 @@ Bluesky では、まともなファイル名を作るためのメタ情報を問
 
 | 内容 | 例 | 理由 |
 | :--- | :--- | :--- |
-| ファイル名テンプレート | `{site}/{user}-{id}-{datetime}-{kind}{n}.{ext}` | 指定どおりのファイル名で保存するため |
+| ファイル名テンプレート | `{site}/{user}-{id}[-{datetime}]-{kind}{n}.{ext}` | 指定どおりのファイル名で保存するため |
 | 同名時の動作 | `uniquify` / `overwrite` / `prompt` | ブラウザのダウンロード API へ渡すため |
 | 常に保存ダイアログを表示する | `true` / `false` | ブラウザのダウンロード API へ渡すため |
 | いいね時にダウンロードする | `true` / `false` | いいねで保存を始めるかどうか。既定は `false` |
@@ -318,7 +334,7 @@ Bluesky では、まともなファイル名を作るためのメタ情報を問
 
 | 内容 | 例 | 理由 |
 | :--- | :--- | :--- |
-| サイトと投稿 ID | `x:1234567890123456789` | どこに表示されても同じ投稿だと分かるようにするため |
+| サイトと投稿 ID | `x:1234567890123456789`（または `bluesky:…`、`poipiku:<投稿 ID>`） | どこに表示されても同じ投稿だと分かるようにするため |
 | 投稿内のメディア数 | `4` | 「全件保存済み」と「一部だけ保存済み」を区別するため |
 | そのうち保存済みのもの | `0, 2`（1 枚目と 3 枚目） | メディアごとのボタンに印を付けるため |
 
@@ -342,7 +358,7 @@ Bluesky では、まともなファイル名を作るためのメタ情報を問
 ここに置いておくことで、止められても保存を続きから再開できるようにしています。
 保存待ちの 1 件ごとに持つのは次の情報です。
 
-* ダウンロード元の URL（X のメディア URL、または Bluesky の `getBlob` の URL）
+* ダウンロード元の URL（X のメディア URL、Bluesky の `getBlob` の URL、またはポイピクの `cdn.poipiku.com` の署名付き画像 URL）
 * テンプレートから組み立てた保存先のファイル名（テンプレートで使っている場合に限り、
   投稿者の名前・投稿 ID・本文を含みます）
 * 投稿 ID と何枚目か、保存時の設定（同名時の動作、保存ダイアログを出すか）
@@ -363,6 +379,7 @@ Bluesky では、まともなファイル名を作るためのメタ情報を問
 | :--- | :--- |
 | X の API レスポンスから拾ったメディア URL | 保存ボタンを押した時点で動画の実 URL が分かっているようにするため |
 | Bluesky の投稿レコードと解決済みの PDS アドレス | 本文・日時・解像度をファイル名に含められるようにするため |
+| ポイピクが返す、原寸画像の署名付き URL | 幅 640 ピクセルのプレビューではなく原本を保存するため。その 1 回の保存に使い、そのまま捨てます |
 | 投稿者・投稿 ID・本文・投稿日時 | ファイル名テンプレートを埋めるため |
 
 X 側のキャッシュは上限 2000 件で古い順に破棄され、ページ内に存在するためタブを閉じるか
@@ -396,7 +413,7 @@ X 側のキャッシュは上限 2000 件で古い順に破棄され、ページ
 このほか、権限を必要としないブラウザ API を 2 つ使います。どちらも開いているタブの表示を
 そろえるためだけのものです。
 
-* **`tabs`** — カウンターと保存済みの更新を、開いている x.com / twitter.com / bsky.app のタブへ
+* **`tabs`** — カウンターと保存済みの更新を、開いている x.com / twitter.com / bsky.app / poipiku.com のタブへ
   送るため。タブはこれらの URL パターンで選び、読み取るのは各タブの番号とシークレットかどうかだけです。
   URL・タイトル・内容は読みません。
 * **`windows`** — 最後のシークレットウィンドウが閉じたことを知り、シークレット側の記録を消すため。
@@ -404,16 +421,19 @@ X 側のキャッシュは上限 2000 件で古い順に破棄され、ページ
 コンテンツスクリプトが動くのは以下のサイトだけです。
 
 ```
-https://x.com/*        https://twitter.com/*        https://bsky.app/*
+https://x.com/*        https://twitter.com/*        https://bsky.app/*        https://poipiku.com/*
 ```
 
 これらのページで本拡張機能が見るのは、投稿の構造（メディア要素、操作バー、投稿者リンク、
 本文、投稿日時）だけです。ボタンを置き、ファイル名を組み立てるために必要な範囲に限られます。
 フォーム入力、Cookie、認証情報、ダイレクトメッセージ、アカウント設定には触れませんし、
-投稿ではないページには関心がありません。
+投稿ではないページには関心がありません。ポイピクでは投稿の個別ページ（`/{user}/{post}.html`）と
+こそフォロ・フォロータグの一覧（`/MyHomePcV.jsp`・`/MyHomeTagPcV.jsp`）の外では何もせず、パスワードを入力したり、代わりに鍵を開けたりもしません。
+例外として読むフォーム入力は、パスワード付き投稿のパスワード欄だけです。その投稿を保存するときに限り、
+ページ自身が送るのと同じリクエストに、その値を入れて送ります（§3）。
 
 **「いいねしたときも同時にダウンロードする」をオンにした場合**は、保存を始めるきっかけを
-知るために、サイトのいいねボタンへのクリックも見ます。見るだけです。いいねを代わりに押したり、
+知るために、サイトのいいねボタン（ポイピクでは絵文字リアクションのボタン）へのクリックも見ます。見るだけです。いいねを代わりに押したり、
 取り消したり、書き換えたりはしません。他の端末で押したいいねや、導入前のいいねも分かりません。
 設定がオフの間（出荷時の状態）は、この待ち受けは何もしません。
 
@@ -432,7 +452,7 @@ https://x.com/*        https://twitter.com/*        https://bsky.app/*
 ディスクには何も書きません。
 
 `host_permissions` は `x.com` / `twitter.com` / `bsky.app` / `public.api.bsky.app` /
-`plc.directory` のみで、それ以外はありません。`did:web` で自前運用している Bluesky アカウントを
+`plc.directory` / `poipiku.com` / `cdn.poipiku.com` のみで、それ以外はありません。`did:web` で自前運用している Bluesky アカウントを
 解決できないのはこの狭さが理由です。DID ドキュメントの取得には任意ドメインへの読み取り権限が必要で、
 既定でその取引をする価値は無いと判断しました。
 
@@ -440,23 +460,32 @@ https://x.com/*        https://twitter.com/*        https://bsky.app/*
 
 ### 3. 外部通信
 
-本拡張機能自身が接続するのは、次の 3 種類のホストだけです。いずれも Bluesky の基盤であり、
-いずれも**保存が始まった後にのみ**発生します（ダウンロードボタンを押したとき、
-または有効にしている場合はいいねを押したとき）。
+本拡張機能自身が接続するのは、次の 4 種類のホストだけです。うち 3 つは Bluesky の基盤、
+残る 1 つはポイピク自身で、いずれも**保存が始まった後にのみ**発生します（ダウンロードボタンを押したとき、
+または有効にしている場合はいいねを押したとき。ポイピクでは絵文字リアクションを送ったとき）。
 
 | 接続先 | タイミング | 送る内容 | 理由 |
 | :--- | :--- | :--- | :--- |
 | `public.api.bsky.app` | Bluesky の投稿を保存するとき | 投稿の AT-URI（投稿者 DID と投稿 ID）、または解決するハンドル | 本文・投稿日時・MIME タイプ・アスペクト比を取得するため |
 | `plc.directory` | そのアカウントについて初回の保存時 | 投稿者の DID | そのアカウントのファイルがどのサーバーにあるかを調べるため |
 | 投稿者の PDS（多くは `bsky.social`） | Bluesky のファイルを保存するとき | 投稿者の DID とファイルの CID | ファイル本体を取得するため |
+| `poipiku.com`（`/f/ShowIllustDetailF.jsp`） | ポイピクの投稿を、その個別ページか、こそフォロ・フォロータグの一覧で保存するとき。保存 1 回につき POST 1 回 | 投稿者のユーザー ID と投稿 ID。パスワード付きの投稿では、その投稿のパスワード欄に入っている値（通常は開くときに自分で入力したパスワード。それ以外の投稿では空）も、ページと同じように送ります | 原寸画像の署名付き URL を受け取るため |
 
-3 つとも公開・認証不要のエンドポイントです。認証情報も、あなたの Cookie も、
+Bluesky の 3 つは公開・認証不要のエンドポイントです。認証情報も、あなたの Cookie も、
 いかなる識別子も、あなたに関する情報も一切付与しません。
 リクエストが伝えるのは「この投稿はどれか」と「このファイルをください」だけで、
 誰が送っても同じ内容になります。
 
+ポイピクへのリクエストは事情が異なるので、はっきり書いておきます。これは、画像をクリックして
+拡大表示するときにポイピクのページ自身が送るのと同じリクエストで、投稿ページ上のコンテンツスクリプトから送ります。
+`poipiku.com` のページから `poipiku.com` へ送るため、ページ自身のリクエストと同じように、
+ブラウザがあなたのポイピクの Cookie（ログイン中のセッション）を付けます。ログインして閲覧できる投稿の
+原寸 URL をポイピクが返してくれるのは、そのためです。本拡張機能はその Cookie を読み取らず、
+保存も、他の場所への送信もしません（そもそも中身を目にしません）。応答は画像の URL を拾うためだけに使い、
+保存が終われば何も残しません。
+
 ファイル本体のダウンロードは、ブラウザのダウンロードマネージャがメディアホスト
-（`pbs.twimg.com`、`video.twimg.com`、または PDS）に対して行います。
+（`pbs.twimg.com`、`video.twimg.com`、PDS、または `cdn.poipiku.com`）に対して行います。
 その URL を自分で開いたときとまったく同じ動作です。
 
 **X に対しては、本拡張機能からの通信は一切ありません。**
@@ -476,7 +505,7 @@ https://x.com/*        https://twitter.com/*        https://bsky.app/*
 
 そもそも何も収集していないので、渡せるものがありません。事業譲渡があった場合も同じです。
 
-また本拡張機能は X や Bluesky の処理者として動くものでもありません。
+また本拡張機能は X・Bluesky・ポイピクの処理者として動くものでもありません。
 これらのサービスの利用にはそれぞれのプライバシーポリシーが適用されます。
 同期される設定の扱いについては、お使いのブラウザベンダーのポリシーが適用されます（§1.1）。
 

@@ -4,7 +4,7 @@
 
 > **The media is already on your screen. This puts a save button next to it.**
 
-**SNS Media Downloader** is a browser extension for **X (Twitter)** and **Bluesky**.
+**SNS Media Downloader** is a browser extension for **X (Twitter)**, **Bluesky** and **Poipiku**.
 
 It adds a download button to the action bar of every post that has media, and saves the
 **original** files — full-resolution images, the highest-bitrate video — straight to your
@@ -29,18 +29,20 @@ Saving one image from a post is a right-click away. Everything past that gets te
 
 ## ✨ Features
 
-* 🐦 **Two sites** — X (Twitter) and Bluesky, each with its own adapter and accent colour.
+* 🐦 **Three sites** — X (Twitter), Bluesky and Poipiku, each with its own adapter and accent colour.
 * 🖼️ **Originals, not previews** — `name=orig` for X images, the highest-bitrate MP4 variant for
-  video, and `com.atproto.sync.getBlob` straight from the author's PDS for Bluesky.
+  video, `com.atproto.sync.getBlob` straight from the author's PDS for Bluesky, and the signed
+  full-size URL the page itself uses for Poipiku.
 * 🎯 **Whole post or one item** — the action-bar button saves everything; a small button on each
   thumbnail saves just that one (it appears once a post has two or more).
-* ❤️ **Save when you like** — optionally, liking a post saves its media at the same time.
+* ❤️ **Save when you like** — optionally, liking a post (sending an emoji reaction, on Poipiku)
+  saves its media at the same time.
   **Off by default**; turn it on in settings when you want it.
 * 📊 **Progress and saved state at a glance** — a counter in the bottom-left corner shows
   *Pending* and *Done* (and *Failed*, if anything failed). Buttons for media you've saved turn into
   a green check mark, and stay that way across page changes and reloads until you close the browser.
 * 🏷️ **Filename templates** — 24 placeholders, subfolders, conditional blocks, per-variable length
-  limits, and a live preview of four sample posts while you type.
+  limits, and a live preview of five sample posts while you type.
 * 🔁 **Failed transfers are retried** — up to three times, with a growing pause between attempts.
   Anything that still won't come down is reported as an error and cleared away, rather than left in
   your download folder as a broken file.
@@ -88,7 +90,9 @@ There's no build step. The repository *is* the extension — download it and loa
 ### ✅ Check that it works
 
 Open any post with an image on [x.com](https://x.com/) or [bsky.app](https://bsky.app/).
-A ⬇️ button should appear in the row with reply / repost / like. Click it, and a counter appears
+A ⬇️ button should appear in the row with reply / repost / like. On [poipiku.com](https://poipiku.com/)
+it appears next to the share / bookmark buttons of each post, on a post's own page and in the
+こそフォロ (secret-follow) and フォロータグ (followed-tags) lists. Click it, and a counter appears
 in the bottom-left corner; once the save finishes, the button turns into a green check mark.
 
 ---
@@ -99,7 +103,7 @@ in the bottom-left corner; once the save finishes, the button turns into a green
 | :--- | :--- | :--- |
 | **Main button** | In the action bar, next to like / bookmark. Shows a small count badge when the post has more than one media item. | Every media item in the post |
 | **Item button** | Top-right corner of each thumbnail. Only appears when the post has **two or more** items. | That one item |
-| **The like button** | The site's own like button — only when you switch this on in settings. | Every media item in the post |
+| **The like button** | The site's own like button (on Poipiku, any emoji reaction button) — only when you switch this on in settings. | Every media item in the post |
 
 ### The download counter
 
@@ -152,7 +156,8 @@ It is **off by default**, and deliberately so: a download you didn't ask for is 
 than one you have to click for. A few details worth knowing:
 
 * **Only liking triggers it.** Removing a like does nothing — the two states are different buttons
-  underneath, and only the "not yet liked" one is watched.
+  underneath, and only the "not yet liked" one is watched. On Poipiku, every emoji reaction you
+  send counts as a like.
 * **Text-only posts are ignored silently.** No toast, no error. Nothing happens at all.
 * **A like never re-saves something already saved.** Like → unlike → like again produces one set
   of files, not two. The same goes for a post you saved with a button: if every item is saved, a
@@ -171,6 +176,12 @@ than one you have to click for. A few details worth knowing:
 * **The lightbox.** No buttons are injected into the full-screen image viewer; use the buttons
   on the post itself.
 * Avatars, banners, and anything that isn't post media.
+* **On Poipiku: anything you haven't unlocked.** Password, follower-only, age-gated and warning
+  posts only get buttons for the images you can already see. The extension never enters a password
+  or opens a post for you. While such a post is still locked, its main button is shown anyway;
+  pressing it just tells you to unlock the post first (a reaction on a locked post does nothing). Buttons appear only on a post's own page (`/{user}/{post}.html`) and in the
+  こそフォロ / フォロータグ lists (`/MyHomePcV.jsp`, `/MyHomeTagPcV.jsp`), not in other lists or
+  timelines (the お気に入り bookmark list uses a different layout).
 
 ---
 
@@ -179,7 +190,7 @@ than one you have to click for. A few details worth knowing:
 The default template is:
 
 ```
-{site}/{user}-{id}-{datetime}-{kind}{n}.{ext}
+{site}/{user}-{id}[-{datetime}]-{kind}{n}.{ext}
 ```
 
 which produces, for the second image of a four-image X post:
@@ -188,7 +199,7 @@ which produces, for the second image of a four-image X post:
 x/example_user-1234567890123456789-20260819_142530-img2.jpg
 ```
 
-Open the settings popup and the four sample previews update as you type, so you never have to
+Open the settings popup and the five sample previews update as you type, so you never have to
 save a file to find out what the template does.
 
 ### Placeholders
@@ -197,13 +208,14 @@ save a file to find out what the template does.
 
 | Placeholder | Value |
 | :--- | :--- |
-| `{site}` | `x` or `bsky` |
-| `{user}` | Screen name (X) or handle (Bluesky) |
+| `{site}` | `x`, `bsky` or `poipiku` |
+| `{user}` | Screen name (X), handle (Bluesky) or numeric user ID (Poipiku) |
 | `{name}` | Display name |
 | `{id}` | Post ID |
 | `{text}` | Post body, with URLs removed |
 
-**Date & time** — the post's own timestamp, converted to your local timezone
+**Date & time** — the post's own timestamp, converted to your local timezone. Poipiku pages don't
+show when a post was made, so these are empty there (wrap them in `[ ]`, or use `{dl_datetime}`)
 
 | Placeholder | Example |
 | :--- | :--- |
@@ -224,8 +236,8 @@ save a file to find out what the template does.
 | `{total}` | How many items the post has |
 | `{kind}` | `img` / `vid` / `gif` |
 | `{ext}` | `jpg`, `png`, `mp4`, `webm` … |
-| `{media_id}` | The original file's ID — the CID on Bluesky, the media hash on X |
-| `{res}` | `1280x720` for X video, the aspect ratio for Bluesky, `orig` for X images |
+| `{media_id}` | The original file's ID — the CID on Bluesky, the media hash on X, the file name on Poipiku |
+| `{res}` | `1280x720` for X video, the aspect ratio for Bluesky, `orig` for X images (empty on Poipiku) |
 
 ### Syntax
 
@@ -269,7 +281,7 @@ Click the toolbar icon (or open the extension's options page — it's the same s
 
 | Setting | Default | What it does |
 | :--- | :--- | :--- |
-| **Filename** | `{site}/{user}-{id}-{datetime}-{kind}{n}.{ext}` | The template. Warnings appear below it for unbalanced `[ ]`, unknown placeholders, and a missing `{ext}`. |
+| **Filename** | `{site}/{user}-{id}[-{datetime}]-{kind}{n}.{ext}` | The template. Warnings appear below it for unbalanced `[ ]`, unknown placeholders, and a missing `{ext}`. |
 | **If a file exists** | Save with a number suffix | `uniquify` / `overwrite` / `prompt`, passed straight to the browser's download API. Firefox doesn't support `prompt` (*Ask every time*), so it isn't offered there. |
 | **Always show the save dialog** | OFF | Ask where to put every single file. |
 | **Also download when you like a post** | OFF | Liking a post saves its media too. See above. |
@@ -288,10 +300,10 @@ the browser.
 
 ## 💡 How it works
 
-Both sites go through the same core (`shared/core.js`): find posts, inject buttons, build
+Every site goes through the same core (`shared/core.js`): find posts, inject buttons, build
 filenames, hand a list of `{url, filename}` pairs to the background script, update the counter
 and the buttons' saved state, and show a toast if something failed.
-Everything site-specific lives in an adapter. The two adapters solve very different problems.
+Everything site-specific lives in an adapter. The adapters solve very different problems.
 
 ### X — reading the response the page already received
 
@@ -343,11 +355,34 @@ itself is then fetched from the author's own PDS, resolved through `plc.director
 Every one of those calls is optional. If the API is unreachable, the DID and CID from the DOM
 are enough to build a working download URL — you just lose the nicer metadata.
 
+### Poipiku — asking for the same URL the page asks for
+
+The thumbnails on a Poipiku post are 640-pixel previews (`cdn.poipiku.com/{user}/{file}_640.jpg`).
+The full-size file is behind a CloudFront signed URL (`…/{file}?Expires=…&Signature=…`), which is
+what the page itself requests from `/f/ShowIllustDetailF.jsp` when you click an image to enlarge it.
+Like the page, it sends the post's password box (`PAS`) as it is: empty for an ordinary post, and the
+password you typed for a password-protected one. Sending anything else makes Poipiku return no images.
+When you press save, the adapter sends that same request **once**, with your own session, picks the
+signed URLs out of the reply and matches them to the thumbnails on screen by file name.
+
+Only thumbnails that are actually on screen are saved. The placeholder images Poipiku shows for a
+locked or warning post (`/img/…`) are ignored, and nothing is unlocked on your behalf: a password,
+follower-only or age-gated post gets buttons only once you've opened it yourself. If you aren't
+signed in, Poipiku doesn't hand out full-size URLs, so nothing can be saved. The page carries no
+post date, so the date placeholders are empty.
+
+A single-image warning post is a special case: unlocking it jumps straight to the enlarged view, and
+the thumbnail on the page stays a warning image. The enlarged view (`#DetailOverlay`) sits outside the
+post, so the adapter watches it separately. Once it shows a signed image belonging to this post, the
+warning thumbnail gets a button for that image and the URL already on screen is used directly, with
+no extra request. The URL is remembered, so closing the enlarged view doesn't take the button away.
+
 ### Injecting the buttons
 
-Both sites replace their timelines continuously as you scroll, so there's no load event to hook.
+X and Bluesky replace their timelines continuously as you scroll, so there's no load event to hook.
 A `MutationObserver` watches the whole document instead — but since the DOM never stops changing on
-either site, it never rescans the page. Only **the posts that changed** are looked at again:
+either site, it never rescans the page. (Poipiku is a plain server-rendered page, but unlocking a
+post adds its images later, so it uses the same mechanism.) Only **the posts that changed** are looked at again:
 
 * **Only relevant changes mark a post.** A post is marked when an element containing posts is
   added; when, inside a post, an element the buttons depend on (the adapter's `watch`: media, links
@@ -380,7 +415,9 @@ say — it tries again every half-second, up to six times, before giving up on t
 The like button is not one button but two: X swaps `data-testid="like"` for
 `data-testid="unlike"` once a post is liked, and Bluesky does the same with `likeBtn` and
 `unlikeBtn`. An adapter supplies only the first of the pair, which is what makes "like saves,
-unlike doesn't" fall out of the selector rather than out of extra state-tracking.
+unlike doesn't" fall out of the selector rather than out of extra state-tracking. Poipiku has no
+like, only emoji reactions that can be sent repeatedly, so every reaction button counts; the
+saved-media record is what stops a second reaction from saving the same files again.
 
 The listener sits on `document` in the capture phase, so it still fires on sites that stop
 propagation further down. It reads the event and returns — no `preventDefault()`, no
@@ -415,8 +452,8 @@ left off whenever it's woken**:
 
 Saves run **one at a time**, even across posts. Parallel transfers fail more often, and with
 *Always show the save dialog* on they'd open a stack of dialogs at once. The background script also
-checks every URL and file name itself: nothing but X's media hosts and Bluesky's `getBlob` is
-downloaded, and nothing is written outside the downloads folder. Anything rejected counts as failed.
+checks every URL and file name itself: nothing but X's media hosts, Bluesky's `getBlob` and
+Poipiku's `cdn.poipiku.com` is downloaded, and nothing is written outside the downloads folder. Anything rejected counts as failed.
 
 Failures are retried — three times, waiting 0.3 s, then 0.8 s, then 1.5 s. Interruption reasons that
 can't change on a second attempt (a 404, a 403, no disk space, and so on) skip the retries and fail
@@ -429,7 +466,7 @@ a failure: it isn't added to *Failed*, and no toast appears.
 ### The counter and the saved-media record
 
 The counter is stored in `storage.session` alongside the queue, and every time a file changes
-state the background sends an `smdUpdate` message to every open X / Bluesky tab (a file that was
+state the background sends an `smdUpdate` message to every open X / Bluesky / Poipiku tab (a file that was
 just saved rides along in the same message, halving the number of messages). Because it's saved
 with the queue, the numbers stay right even if the background script is stopped and restarted. The
 background also decides *when* the counter should disappear (`hideAt`) and sends that along, so every
@@ -440,7 +477,8 @@ is `site:postId`, and the value is a single number: *media count × 2³² + a bi
 items*, where bit *n* is set once item *n* (zero-based) has been saved — so items 1 and 3 of four
 saved is `4 × 2³² + 0b101`. That's much lighter than an object or array per post, in memory, in
 messages and in writes (and it's why only posts with up to 32 media items are recorded; X and
-Bluesky both stop at four). It's capped at 3000 posts, oldest dropped first. A tab that has just
+Bluesky both stop at four). A Poipiku post with more than 32 images still saves normally, it just
+never shows the saved state — and for the same reason, reacting to it again saves it again. It's capped at 3000 posts, oldest dropped first. A tab that has just
 loaded sends `smdState` to receive the current record and counter.
 
 X sometimes reuses a post's elements to show a different post. Link `href` changes are watched too,
@@ -513,6 +551,12 @@ a post that was nothing but a link renders as empty.
 That's **Always show the save dialog**, plus your browser's own "ask where to save each file"
 setting — both have to be off for silent saving.
 
+**On Poipiku: "Could not get the media URL."**
+You need to be signed in to Poipiku — the full-size URLs are only handed out to a signed-in
+session. For a locked post (password, follower-only, age-gated, warning), open it first; only
+images that are already visible on the page are saved. Buttons only appear on a post's own page
+and in the こそフォロ / フォロータグ lists, not in other lists.
+
 **Settings reset themselves on another machine.**
 They're stored in `storage.sync` and follow your browser profile. If two devices disagree, the
 last write wins.
@@ -556,11 +600,12 @@ The extension asks for three permissions — `downloads` to save files (and to f
 completion, so failures can be retried and cleared away), `storage` to remember your four settings
 and, until the browser closes, which media you've saved and what's still queued, and `alarms` to
 check on a running download every 30 seconds — plus access to `x.com`, `twitter.com`, `bsky.app`,
-`public.api.bsky.app` and `plc.directory`.
+`public.api.bsky.app`, `plc.directory`, `poipiku.com` and `cdn.poipiku.com`.
 
 It does make network requests, and it's worth being precise about which: **only when a save is
 triggered** — by the download button, or by a like if you turned that on — and only to Bluesky's
-public API and the author's PDS. On X it makes no requests of its own at all — it reads responses
+public API and the author's PDS, or, on Poipiku, to `poipiku.com` itself (the same request the page
+makes when you enlarge an image, sent with your Poipiku session) and its image server. On X it makes no requests of its own at all — it reads responses
 the page had already received. Which media you've saved is recorded only on your device, in
 `storage.session`, for the saved-state buttons — never synced, never sent, and cleared when the
 browser closes. What you view and which posts you like aren't recorded at all (a save triggered by a
@@ -579,12 +624,13 @@ manifest-chrome.json      Chrome variant: minimum_chrome_version, service-worker
 manifest-firefox.json     Firefox variant: browser_specific_settings, event-page background
 background.js             Service worker: download queue (retries, resumes after being stopped), counter, saved-media record, Bluesky API, DID → PDS resolution, caching
 popup.html/.css/.js       Settings UI (also serves as the options page)
-content.css               Button, toast and counter styles, injected into both sites
+content.css               Button, toast and counter styles, injected into every site
 shared/template.js        SMD  — i18n, filename templates, defaults
 shared/core.js            SMDCore — button injection, save flow, toasts, counter, saved-state buttons
 sites/x/interceptor.js    MAIN world: wraps fetch / XHR to harvest media URLs
 sites/x/content.js        X adapter
 sites/bluesky/content.js  Bluesky adapter
+sites/poipiku/content.js  Poipiku adapter
 _locales/                 UI translations for 9 languages
 icons/
 ```
@@ -594,7 +640,7 @@ icons/
 
 | Key | Role |
 | :--- | :--- |
-| `site` | `"x"` / `"bluesky"`. Selects the CSS accent colour via `<html data-smd-site>` |
+| `site` | `"x"` / `"bluesky"` / `"poipiku"`. Selects the CSS accent colour via `<html data-smd-site>` |
 | `postRoot` | Selector matching the container of a single post |
 | `mediaContainers(root)` | The elements wrapping each media item |
 | `postId(root)` | Just the post ID (or `null`), quickly. Called every time the buttons are repainted, so keep it light |
@@ -602,6 +648,7 @@ icons/
 | `getMedia(root, post)` | `[{ kind, url, ext, id, res }]`, in the same order as `mediaContainers`, with `null` for any item whose URL is unknown (never drop it — item buttons are matched by position). May also fill in fields on `post` |
 | `actionBar(root)` | The element the main button is appended to |
 | `likeButton` | *Optional.* Selector for the like button, used by save-on-like. Must **not** match the un-like button. Omit it and only that feature switches off |
+| `isLocked(root)` | *Optional.* `true` for a post whose media exists but isn't shown yet (password, warning…). Such a post gets a main button even with no media, and pressing it asks the user to unlock the post first. Omit it and posts without media get no buttons |
 | `watch` | *Optional.* Selector for the elements the buttons depend on (media, links to the post, action-bar buttons). Only additions or removals of these inside a post cause its buttons to be looked at again. Omit it and any change inside a post does (it works, just more slowly) |
 
 ### Adding a site

@@ -3,7 +3,7 @@
 
     "name": "__MSG_extName__",
     "short_name": "__MSG_extName__",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "description": "__MSG_extDesc__",
 
     "default_locale": "en",
@@ -27,7 +27,9 @@
         "https://twitter.com/*",
         "https://bsky.app/*",
         "https://public.api.bsky.app/*",
-        "https://plc.directory/*"
+        "https://plc.directory/*",
+        "https://poipiku.com/*",
+        "https://cdn.poipiku.com/*"
     ],
 
     "content_scripts": [
@@ -70,6 +72,20 @@
                 "content.css"
             ],
             "run_at": "document_start"
+        },
+        {
+            "matches": [
+                "https://poipiku.com/*"
+            ],
+            "js": [
+                "shared/template.js",
+                "shared/core.js",
+                "sites/poipiku/content.js"
+            ],
+            "css": [
+                "content.css"
+            ],
+            "run_at": "document_end"
         }
     ],
 

@@ -33,7 +33,7 @@ globalThis.SMDCore = (() => {
 
     /**
      * @typedef {object} PostInfo 投稿 1 件の情報
-     * @property {"x"|"bluesky"} site - サイト
+     * @property {"x"|"bluesky"|"poipiku"} site - サイト
      * @property {string} screenName - ユーザー名 / ハンドル
      * @property {string} postId - 投稿 ID
      * @property {string} name - 表示名
@@ -52,7 +52,7 @@ globalThis.SMDCore = (() => {
 
     /**
      * @typedef {object} SiteAdapter サイトごとの差分を吸収するオブジェクト
-     * @property {"x"|"bluesky"} site - サイト。保存済みの記録のキーと、CSS のアクセント色の切り替えに使う
+     * @property {"x"|"bluesky"|"poipiku"} site - サイト。保存済みの記録のキーと、CSS のアクセント色の切り替えに使う
      * @property {string} postRoot - 投稿 1 件のコンテナを選ぶ CSS セレクタ
      * @property {(root: Element) => Element[]} mediaContainers - メディアを包む要素（画面の並び順）
      * @property {(root: Element) => string|null} postId
@@ -68,6 +68,9 @@ globalThis.SMDCore = (() => {
      *   省略すると、投稿の中のどんな変化でも見直します
      * @property {string} [likeButton] - 「いいね」ボタンのセレクタ（「いいねを取り消す」には一致しないこと）。
      *   省略すると、いいね連動保存だけが無効になる
+     * @property {(root: Element) => boolean} [isLocked] - メディアはあるが、まだ表示されていない（パスワードや
+     *   注意書きで隠れている）投稿か。true の投稿には、メディアが 0 件でもメインボタンを出し、押されたら
+     *   先に解除するよう知らせます。省略すると、メディアが 0 件の投稿にはボタンを出しません
      */
 
     // 下向き矢印（保存）とチェックマーク（保存済み）のアイコン。
@@ -211,10 +214,11 @@ globalThis.SMDCore = (() => {
      * n 番目のビットが立っているか。
      *
      * @param {number} mask
-     * @param {number} n - 0 始まり（0〜31）
+     * @param {number} n - 0 始まり。記録できるのは 0〜31 だけなので、32 以上はいつも false
+     *   （シフト量は 32 で割った余りになるため、そのまま調べると別の番号のビットを見てしまいます）
      * @returns {boolean}
      */
-    const hasBit = (mask, n) => ((mask >>> n) & 1) === 1;
+    const hasBit = (mask, n) => n >= 0 && n < 32 && ((mask >>> n) & 1) === 1;
 
     /**
      * 立っているビットの数を数える（保存済みの件数）。
@@ -394,6 +398,9 @@ globalThis.SMDCore = (() => {
         ]);
         const now = new Date(); // 同じ投稿のファイルで {dl_datetime} がずれないよう、1 回だけ取ります
 
+        // まだ解除されていない投稿なら、先に解除するよう知らせます。
+        if (all.length === 0 && adapter.isLocked?.(root)) return nothing("toastLocked");
+
         // 3. 保存するものを選び、ファイル名を組み立てる。
         //    番号（index）は保存済みの記録に使うので、メディアと組にして持ち回ります。
         const items = [];
@@ -552,6 +559,7 @@ globalThis.SMDCore = (() => {
      * @property {Element} root - 投稿のコンテナ
      * @property {string|null} key - 記録のキー
      * @property {number} count - 画面上のメディア数
+     * @property {boolean} locked - メディアが 0 件だが、解除すれば見られる投稿か（メインボタンだけを出す）
      * @property {Element[]} remove - 取り除くボタン
      * @property {HTMLButtonElement[]} keep - そのまま使うボタン
      * @property {Element|null} bar - メインボタンを新しく置く場所（置かないなら null）
@@ -579,8 +587,13 @@ globalThis.SMDCore = (() => {
         const mine = (el) => el.closest(adapter.postRoot) === root;
         const existing = [...root.querySelectorAll(BUTTONS)].filter(mine);
 
-        const plan = { root, key: null, count: media.length, remove: existing, keep: [], bar: null, add: [], missing: false };
-        if (media.length === 0) return plan; // メディアが無ければ、ボタンはすべて取り除く
+        // メディアが 0 件でも、解除すれば見られる投稿にはメインボタンだけを出します（押すと解除を促す）。
+        const locked = media.length === 0 && adapter.isLocked?.(root) === true;
+
+        const plan = {
+            root, key: null, count: media.length, locked, remove: existing, keep: [], bar: null, add: [], missing: false,
+        };
+        if (media.length === 0 && !locked) return plan; // メディアが無ければ、ボタンはすべて取り除く
 
         // メインボタン: 覚えているものが今もこの投稿にあれば、そのまま使います。
         const main = mainButtons.get(root);
@@ -621,9 +634,9 @@ globalThis.SMDCore = (() => {
      * @param {Plan} plan
      * @returns {void}
      */
-    const apply = ({ root, key, count, remove, keep, bar, add }) => {
+    const apply = ({ root, key, count, locked, remove, keep, bar, add }) => {
         for (const el of remove) el.remove();
-        if (count === 0) return;
+        if (count === 0 && !locked) return;
 
         const buttons = [...keep];
 
@@ -724,7 +737,8 @@ globalThis.SMDCore = (() => {
      * 拡張機能の動作を開始する。各サイトのスクリプトはこれを 1 回呼ぶだけです。
      *
      * @param {SiteAdapter} adapter
-     * @returns {void}
+     * @returns {{refresh: () => void}} refresh は、すべての投稿のボタンを見直す。
+     *   投稿の外の変化でメディアの数が変わるサイト（ポイピクの拡大表示など）が呼びます
      */
     const start = (adapter) => {
         // <html data-smd-site="x"> のような目印を付け、CSS でサイトごとのアクセント色を切り替えます。
@@ -923,6 +937,7 @@ globalThis.SMDCore = (() => {
         });
 
         markAll();
+        return { refresh: markAll };
     };
 
     return { start, request };

@@ -34,7 +34,8 @@ body:
       options:
         - X (Twitter)
         - Bluesky
-        - Both / 両方
+        - Poipiku / ポイピク
+        - More than one / 複数のサイト
         - Not site-specific — settings screen, etc. / サイトに依存しない（設定画面など）
     validations:
       required: true
