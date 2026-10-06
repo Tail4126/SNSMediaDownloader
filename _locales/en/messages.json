@@ -17,6 +17,7 @@
     "warnNoExt": { "message": "{ext} is missing (files will be saved without an extension)" },
     "toastNoPost": { "message": "Could not read the post information" },
     "toastNoMedia": { "message": "Could not get the media URL. Please reload the page" },
+    "toastLocked": { "message": "This post isn't shown yet. Unlock it first (enter the password or open the warning) so its images appear, then press the button again" },
     "toastCommError": { "message": "Failed to communicate with the extension. Please reload the page" },
     "toastPartial": { "message": "$1 saved / $2 failed" },
     "toastFailed": { "message": "Failed to download $1 file(s)" },

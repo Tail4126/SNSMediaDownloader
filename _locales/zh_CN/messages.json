@@ -17,6 +17,7 @@
     "warnNoExt": { "message": "缺少 {ext}（将不带扩展名保存）" },
     "toastNoPost": { "message": "无法获取帖子信息" },
     "toastNoMedia": { "message": "无法获取媒体 URL，请重新加载页面" },
+    "toastLocked": { "message": "此帖子尚未显示。请先输入密码或确认提示，让图片显示出来后，再按一次按钮" },
     "toastCommError": { "message": "与扩展程序通信失败，请重新加载页面" },
     "toastPartial": { "message": "已保存 $1 个 / 失败 $2 个" },
     "toastFailed": { "message": "$1 个文件下载失败" },

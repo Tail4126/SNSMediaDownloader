@@ -1,6 +1,6 @@
 # Privacy Policy / プライバシーポリシー
 
-**Last updated / 最終更新:** 2026-10-05
+**Last updated / 最終更新:** 2026-10-06
 
 > **Note on Language / 言語に関する注記**
 > このポリシーは英語で書いたものが正式版で、日本語訳は参考用です。両者の内容にズレがあった場合は英語版を優先します。
@@ -51,7 +51,7 @@ Four settings:
 
 | Item | Example | Why |
 | :--- | :--- | :--- |
-| Filename template | `{site}/{user}-{id}-{datetime}-{kind}{n}.{ext}` | So your files are named the way you asked |
+| Filename template | `{site}/{user}-{id}[-{datetime}]-{kind}{n}.{ext}` | So your files are named the way you asked |
 | Conflict behaviour | `uniquify` / `overwrite` / `prompt` | Passed to the browser's download API |
 | Always show the save dialog | `true` / `false` | Passed to the browser's download API |
 | Download when you like a post | `true` / `false` | Whether liking a post also starts a save. Defaults to `false` |
@@ -316,7 +316,7 @@ Bluesky では、まともなファイル名を作るためのメタ情報を、
 
 | 内容 | 例 | 理由 |
 | :--- | :--- | :--- |
-| ファイル名テンプレート | `{site}/{user}-{id}-{datetime}-{kind}{n}.{ext}` | 指定どおりのファイル名で保存するため |
+| ファイル名テンプレート | `{site}/{user}-{id}[-{datetime}]-{kind}{n}.{ext}` | 指定どおりのファイル名で保存するため |
 | 同名時の動作 | `uniquify` / `overwrite` / `prompt` | ブラウザのダウンロード API へ渡すため |
 | 常に保存ダイアログを表示する | `true` / `false` | ブラウザのダウンロード API へ渡すため |
 | いいね時にダウンロードする | `true` / `false` | いいねで保存を始めるかどうか。既定は `false` |

@@ -17,6 +17,7 @@
     "warnNoExt": { "message": "{ext} がありません（拡張子なしで保存されます）" },
     "toastNoPost": { "message": "投稿情報を取得できませんでした" },
     "toastNoMedia": { "message": "メディアURLを取得できません。ページを再読み込みしてください" },
+    "toastLocked": { "message": "この投稿はまだ表示されていません。パスワードの入力や注意書きの確認をして画像を表示してから、もう一度ボタンを押してください" },
     "toastCommError": { "message": "拡張機能との通信に失敗しました。ページを再読み込みしてください" },
     "toastPartial": { "message": "$1件保存 / $2件失敗" },
     "toastFailed": { "message": "$1件のダウンロードに失敗しました" },

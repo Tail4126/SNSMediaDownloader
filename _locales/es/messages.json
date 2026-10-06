@@ -17,6 +17,7 @@
     "warnNoExt": { "message": "Falta {ext} (los archivos se guardarán sin extensión)" },
     "toastNoPost": { "message": "No se pudo obtener la información de la publicación" },
     "toastNoMedia": { "message": "No se pudo obtener la URL del medio. Recarga la página" },
+    "toastLocked": { "message": "Esta publicación aún no se muestra. Desbloquéala primero (introduce la contraseña o abre el aviso) para que aparezcan las imágenes y vuelve a pulsar el botón" },
     "toastCommError": { "message": "Error de comunicación con la extensión. Recarga la página" },
     "toastPartial": { "message": "$1 guardado(s) / $2 fallido(s)" },
     "toastFailed": { "message": "No se pudo descargar $1 archivo(s)" },

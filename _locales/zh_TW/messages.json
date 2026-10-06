@@ -17,6 +17,7 @@
     "warnNoExt": { "message": "缺少 {ext}（將不含副檔名儲存）" },
     "toastNoPost": { "message": "無法取得貼文資訊" },
     "toastNoMedia": { "message": "無法取得媒體 URL，請重新載入頁面" },
+    "toastLocked": { "message": "此貼文尚未顯示。請先輸入密碼或確認提示，讓圖片顯示出來後，再按一次按鈕" },
     "toastCommError": { "message": "與擴充功能通訊失敗，請重新載入頁面" },
     "toastPartial": { "message": "已儲存 $1 個 / 失敗 $2 個" },
     "toastFailed": { "message": "$1 個檔案下載失敗" },

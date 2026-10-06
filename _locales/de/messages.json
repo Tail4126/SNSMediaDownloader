@@ -17,6 +17,7 @@
     "warnNoExt": { "message": "{ext} fehlt (Dateien werden ohne Endung gespeichert)" },
     "toastNoPost": { "message": "Beitragsinformationen konnten nicht gelesen werden" },
     "toastNoMedia": { "message": "Medien-URL nicht verfügbar. Bitte die Seite neu laden" },
+    "toastLocked": { "message": "Dieser Beitrag wird noch nicht angezeigt. Entsperre ihn zuerst (Passwort eingeben oder Warnhinweis öffnen), bis die Bilder sichtbar sind, und drücke dann erneut auf die Schaltfläche" },
     "toastCommError": { "message": "Kommunikation mit der Erweiterung fehlgeschlagen. Bitte die Seite neu laden" },
     "toastPartial": { "message": "$1 gespeichert / $2 fehlgeschlagen" },
     "toastFailed": { "message": "Download von $1 Datei(en) fehlgeschlagen" },

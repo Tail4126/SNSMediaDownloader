@@ -31,11 +31,14 @@ globalThis.SMD = (() => {
 
     /** 設定の既定値。設定画面の「既定値に戻す」でも使います */
     const DEFAULTS = {
-        file: "{site}/{user}-{id}-{datetime}-{kind}{n}.{ext}",
+        file: "{site}/{user}-{id}[-{datetime}]-{kind}{n}.{ext}",
         conflictAction: "uniquify", // 同名ファイルがあるときは連番を付けて保存
         alwaysSaveAs: false,        // 毎回「名前を付けて保存」ダイアログを出すか
         likeDownload: false,        // 「いいね」と同時に保存するか（押した覚えのない保存は驚きが大きいので既定はオフ）
     };
+
+    /** 1.3.0 までの既定のファイル名。保存されていれば、今の既定値に読み替えます */
+    const LEGACY_DEFAULT_FILE = "{site}/{user}-{id}-{datetime}-{kind}{n}.{ext}";
 
     /**
      * このブラウザの downloads API が受け付ける conflictAction の値。
@@ -57,8 +60,12 @@ globalThis.SMD = (() => {
     const loadSettings = async () => {
         const s = await chrome.storage.sync.get(DEFAULTS).catch(() => DEFAULTS);
 
+        // 以前の既定値がそのまま保存されている場合は、今の既定値に読み替えます
+        // （投稿日時の無いポイピクで「--」が残らないよう、{datetime} を条件ブロックで囲んだもの）。
+        const file = s.file === LEGACY_DEFAULT_FILE ? DEFAULTS.file : s.file;
+
         return {
-            file: typeof s.file === "string" ? s.file : DEFAULTS.file,
+            file: typeof file === "string" ? file : DEFAULTS.file,
             conflictAction: CONFLICT_ACTIONS.includes(s.conflictAction) ? s.conflictAction : DEFAULTS.conflictAction,
             alwaysSaveAs: s.alwaysSaveAs === true,
             likeDownload: s.likeDownload === true,

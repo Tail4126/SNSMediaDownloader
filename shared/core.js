@@ -68,6 +68,9 @@ globalThis.SMDCore = (() => {
      *   省略すると、投稿の中のどんな変化でも見直します
      * @property {string} [likeButton] - 「いいね」ボタンのセレクタ（「いいねを取り消す」には一致しないこと）。
      *   省略すると、いいね連動保存だけが無効になる
+     * @property {(root: Element) => boolean} [isLocked] - メディアはあるが、まだ表示されていない（パスワードや
+     *   注意書きで隠れている）投稿か。true の投稿には、メディアが 0 件でもメインボタンを出し、押されたら
+     *   先に解除するよう知らせます。省略すると、メディアが 0 件の投稿にはボタンを出しません
      */
 
     // 下向き矢印（保存）とチェックマーク（保存済み）のアイコン。
@@ -395,6 +398,9 @@ globalThis.SMDCore = (() => {
         ]);
         const now = new Date(); // 同じ投稿のファイルで {dl_datetime} がずれないよう、1 回だけ取ります
 
+        // まだ解除されていない投稿なら、先に解除するよう知らせます。
+        if (all.length === 0 && adapter.isLocked?.(root)) return nothing("toastLocked");
+
         // 3. 保存するものを選び、ファイル名を組み立てる。
         //    番号（index）は保存済みの記録に使うので、メディアと組にして持ち回ります。
         const items = [];
@@ -553,6 +559,7 @@ globalThis.SMDCore = (() => {
      * @property {Element} root - 投稿のコンテナ
      * @property {string|null} key - 記録のキー
      * @property {number} count - 画面上のメディア数
+     * @property {boolean} locked - メディアが 0 件だが、解除すれば見られる投稿か（メインボタンだけを出す）
      * @property {Element[]} remove - 取り除くボタン
      * @property {HTMLButtonElement[]} keep - そのまま使うボタン
      * @property {Element|null} bar - メインボタンを新しく置く場所（置かないなら null）
@@ -580,8 +587,13 @@ globalThis.SMDCore = (() => {
         const mine = (el) => el.closest(adapter.postRoot) === root;
         const existing = [...root.querySelectorAll(BUTTONS)].filter(mine);
 
-        const plan = { root, key: null, count: media.length, remove: existing, keep: [], bar: null, add: [], missing: false };
-        if (media.length === 0) return plan; // メディアが無ければ、ボタンはすべて取り除く
+        // メディアが 0 件でも、解除すれば見られる投稿にはメインボタンだけを出します（押すと解除を促す）。
+        const locked = media.length === 0 && adapter.isLocked?.(root) === true;
+
+        const plan = {
+            root, key: null, count: media.length, locked, remove: existing, keep: [], bar: null, add: [], missing: false,
+        };
+        if (media.length === 0 && !locked) return plan; // メディアが無ければ、ボタンはすべて取り除く
 
         // メインボタン: 覚えているものが今もこの投稿にあれば、そのまま使います。
         const main = mainButtons.get(root);
@@ -622,9 +634,9 @@ globalThis.SMDCore = (() => {
      * @param {Plan} plan
      * @returns {void}
      */
-    const apply = ({ root, key, count, remove, keep, bar, add }) => {
+    const apply = ({ root, key, count, locked, remove, keep, bar, add }) => {
         for (const el of remove) el.remove();
-        if (count === 0) return;
+        if (count === 0 && !locked) return;
 
         const buttons = [...keep];
 

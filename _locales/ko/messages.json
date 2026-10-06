@@ -17,6 +17,7 @@
     "warnNoExt": { "message": "{ext}가 없습니다(확장자 없이 저장됩니다)" },
     "toastNoPost": { "message": "게시물 정보를 가져오지 못했습니다" },
     "toastNoMedia": { "message": "미디어 URL을 가져올 수 없습니다. 페이지를 새로고침하세요" },
+    "toastLocked": { "message": "이 게시물은 아직 표시되지 않았습니다. 비밀번호를 입력하거나 경고를 확인해 이미지를 표시한 뒤, 다시 버튼을 눌러 주세요" },
     "toastCommError": { "message": "확장 프로그램과 통신하지 못했습니다. 페이지를 새로고침하세요" },
     "toastPartial": { "message": "$1개 저장 / $2개 실패" },
     "toastFailed": { "message": "$1개를 다운로드하지 못했습니다" },

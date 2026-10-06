@@ -169,6 +169,17 @@
     };
 
     /**
+     * まだ解除されていない投稿か（アダプタの isLocked）。
+     * サムネイルの枠はあるのに、本物の画像が 1 枚も見えていない投稿です（パスワード・フォロワー限定・
+     * 年齢制限・注意書きの代わりの画像だけが出ている状態）。文章の投稿（.Text）は保存する画像が無いので除きます。
+     *
+     * @param {Element} root
+     * @returns {boolean}
+     */
+    const isLocked = (root) =>
+        !root.classList.contains("Text") && root.querySelector(THUMB) !== null && thumbs(root).length === 0;
+
+    /**
      * 投稿者のユーザー ID を読む。一覧では投稿ごとに投稿者が違うので、ページの URL ではなく
      * 投稿の中から取ります。名前のリンク（/{ユーザーID}/）を優先し、無ければサムネイルの
      * onclick（showIllustDetail(ユーザーID, 投稿ID, …)）から取ります。
@@ -333,6 +344,8 @@
         postId,
         readPost,
         getMedia,
+
+        isLocked,
 
         /** 共有・ブックマークのボタンが並ぶ場所 */
         actionBar: (root) => root.querySelector(".IllustItemCommand .IllustItemCommandSub"),

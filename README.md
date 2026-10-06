@@ -178,7 +178,8 @@ than one you have to click for. A few details worth knowing:
 * Avatars, banners, and anything that isn't post media.
 * **On Poipiku: anything you haven't unlocked.** Password, follower-only, age-gated and warning
   posts only get buttons for the images you can already see. The extension never enters a password
-  or opens a post for you. Buttons appear only on a post's own page (`/{user}/{post}.html`) and in the
+  or opens a post for you. While such a post is still locked, its main button is shown anyway;
+  pressing it just tells you to unlock the post first (a reaction on a locked post does nothing). Buttons appear only on a post's own page (`/{user}/{post}.html`) and in the
   こそフォロ / フォロータグ lists (`/MyHomePcV.jsp`, `/MyHomeTagPcV.jsp`), not in other lists or
   timelines (the お気に入り bookmark list uses a different layout).
 
@@ -189,7 +190,7 @@ than one you have to click for. A few details worth knowing:
 The default template is:
 
 ```
-{site}/{user}-{id}-{datetime}-{kind}{n}.{ext}
+{site}/{user}-{id}[-{datetime}]-{kind}{n}.{ext}
 ```
 
 which produces, for the second image of a four-image X post:
@@ -280,7 +281,7 @@ Click the toolbar icon (or open the extension's options page — it's the same s
 
 | Setting | Default | What it does |
 | :--- | :--- | :--- |
-| **Filename** | `{site}/{user}-{id}-{datetime}-{kind}{n}.{ext}` | The template. Warnings appear below it for unbalanced `[ ]`, unknown placeholders, and a missing `{ext}`. |
+| **Filename** | `{site}/{user}-{id}[-{datetime}]-{kind}{n}.{ext}` | The template. Warnings appear below it for unbalanced `[ ]`, unknown placeholders, and a missing `{ext}`. |
 | **If a file exists** | Save with a number suffix | `uniquify` / `overwrite` / `prompt`, passed straight to the browser's download API. Firefox doesn't support `prompt` (*Ask every time*), so it isn't offered there. |
 | **Always show the save dialog** | OFF | Ask where to put every single file. |
 | **Also download when you like a post** | OFF | Liking a post saves its media too. See above. |
@@ -647,6 +648,7 @@ icons/
 | `getMedia(root, post)` | `[{ kind, url, ext, id, res }]`, in the same order as `mediaContainers`, with `null` for any item whose URL is unknown (never drop it — item buttons are matched by position). May also fill in fields on `post` |
 | `actionBar(root)` | The element the main button is appended to |
 | `likeButton` | *Optional.* Selector for the like button, used by save-on-like. Must **not** match the un-like button. Omit it and only that feature switches off |
+| `isLocked(root)` | *Optional.* `true` for a post whose media exists but isn't shown yet (password, warning…). Such a post gets a main button even with no media, and pressing it asks the user to unlock the post first. Omit it and posts without media get no buttons |
 | `watch` | *Optional.* Selector for the elements the buttons depend on (media, links to the post, action-bar buttons). Only additions or removals of these inside a post cause its buttons to be looked at again. Omit it and any change inside a post does (it works, just more slowly) |
 
 ### Adding a site
