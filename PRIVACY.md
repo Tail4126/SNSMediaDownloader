@@ -202,7 +202,7 @@ switched that on:
 | `public.api.bsky.app` | Saving a Bluesky post | The post's AT-URI (its author DID and post ID), or a handle to resolve | To fetch the post's text, timestamp, MIME type and aspect ratio |
 | `plc.directory` | First save for a given account | The author's DID | To find which server that account's files live on |
 | The author's PDS (usually `bsky.social`) | Saving a Bluesky file | The author's DID and the file's CID | To fetch the file itself |
-| `poipiku.com` (`/f/ShowIllustDetailF.jsp`) | Saving a Poipiku post, on that post's own page — one POST per save | The author's user ID and the post ID | To get the signed full-size image URLs |
+| `poipiku.com` (`/f/ShowIllustDetailF.jsp`) | Saving a Poipiku post, on that post's own page — one POST per save | The author's user ID and the post ID — and, for a password-protected post, whatever is in that post's password box (normally the password you typed to open it; empty for every other post), exactly as the page sends it | To get the signed full-size image URLs |
 
 The three Bluesky endpoints are public and unauthenticated. No credentials, no cookies of yours, no
 identifier of any kind, and nothing about you is attached — the requests say only "which post is
@@ -465,7 +465,7 @@ https://x.com/*        https://twitter.com/*        https://bsky.app/*        ht
 | `public.api.bsky.app` | Bluesky の投稿を保存するとき | 投稿の AT-URI（投稿者 DID と投稿 ID）、または解決するハンドル | 本文・投稿日時・MIME タイプ・アスペクト比を取得するため |
 | `plc.directory` | そのアカウントについて初回の保存時 | 投稿者の DID | そのアカウントのファイルがどのサーバーにあるかを調べるため |
 | 投稿者の PDS（多くは `bsky.social`） | Bluesky のファイルを保存するとき | 投稿者の DID とファイルの CID | ファイル本体を取得するため |
-| `poipiku.com`（`/f/ShowIllustDetailF.jsp`） | ポイピクの投稿をその個別ページで保存するとき。保存 1 回につき POST 1 回 | 投稿者のユーザー ID と投稿 ID | 原寸画像の署名付き URL を受け取るため |
+| `poipiku.com`（`/f/ShowIllustDetailF.jsp`） | ポイピクの投稿をその個別ページで保存するとき。保存 1 回につき POST 1 回 | 投稿者のユーザー ID と投稿 ID。パスワード付きの投稿では、その投稿のパスワード欄に入っている値（通常は開くときに自分で入力したパスワード。それ以外の投稿では空）も、ページと同じように送ります | 原寸画像の署名付き URL を受け取るため |
 
 Bluesky の 3 つは公開・認証不要のエンドポイントです。認証情報も、あなたの Cookie も、
 いかなる識別子も、あなたに関する情報も一切付与しません。

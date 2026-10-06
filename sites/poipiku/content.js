@@ -11,6 +11,10 @@
  *
  * パスワード・フォロワー限定・ワンクッションなどの投稿は、画面で閲覧できている（解除済みの）
  * 画像だけを保存します。解除の操作を代わりに行ったり、画面に無い画像を取得したりはしません。
+ *
+ * 画像 1 枚のワンクッション投稿は、解除してもサムネイルが警告画像のまま変わらず、原寸画像は
+ * 投稿の外にある拡大表示（#DetailOverlay）にだけ出ます。そこで拡大表示に出た署名付き URL も
+ * 覚えておき、その投稿の画像として扱います（警告画像のサムネイルにボタンを付けます）。
  * ==================================================================
  */
 
@@ -42,6 +46,19 @@
     /** 応答の中の、配信元の URL */
     const CDN_URL = /https:\/\/cdn\.poipiku\.com\/[^"'\s<>\\]+/g;
 
+    /** ページ内に表示された署名付き画像（拡大表示など） */
+    const SIGNED_IMG = `img[src^="${CDN}/"][src*="Signature="]`;
+
+    /** 拡大表示の枠。投稿の外（ページの末尾）にあります */
+    const OVERLAY = "#DetailOverlay";
+
+    /**
+     * ページ内に表示された署名付き URL。原寸画像のパス → URL（表示された順）。
+     * 拡大表示を閉じても保存できるよう、一度見えたものは覚えておきます。
+     * @type {Map<string, string>}
+     */
+    const shownSigned = new Map();
+
     /**
      * Firefox では content.fetch がページ側の fetch で、Cookie もページと同じように扱われます。
      * Chrome の拡張機能の fetch は、同じオリジンへのリクエストならそのまま Cookie を送ります。
@@ -61,7 +78,47 @@
     };
 
     /**
+     * 投稿 ID を読む。
+     *
+     * @param {Element} root
+     * @returns {string|null}
+     */
+    const postId = (root) => /^IllustItem_(\d+)$/.exec(root.id)?.[1] ?? null;
+
+    /**
+     * 原寸画像のパスが、その投稿のものか。ファイル名は「{投稿ID（0 埋め）}_…」で始まります。
+     *
+     * @param {string} path
+     * @param {string|null} cid - 投稿 ID
+     * @returns {boolean}
+     */
+    const belongsTo = (path, cid) => {
+        const head = /^\/\d+\/(\d+)_/.exec(path)?.[1];
+        return head !== undefined && cid !== null && Number(head) === Number(cid);
+    };
+
+    /**
+     * ページ内に表示された署名付き画像を拾って覚える。
+     *
+     * @returns {boolean} 新しく覚えたものがあれば true
+     */
+    const collectShown = () => {
+        let added = false;
+        for (const img of document.querySelectorAll(SIGNED_IMG)) {
+            const path = filePath(img.src);
+            if (path && !shownSigned.has(path)) {
+                shownSigned.set(path, img.src);
+                added = true;
+            }
+        }
+        return added;
+    };
+
+    /**
      * この投稿の、画面に表示されている画像（サムネイル）。同じ画像が 2 回出ている場合は最初の 1 つだけ。
+     *
+     * 本物のサムネイルが 1 枚も無く、拡大表示でこの投稿の画像が見えていた場合（画像 1 枚の
+     * ワンクッション投稿を解除したとき）は、警告画像のサムネイルをその画像の置き場所にします。
      *
      * @param {Element} root
      * @returns {{el: HTMLImageElement, path: string}[]}
@@ -75,16 +132,13 @@
             seen.add(path);
             list.push({ el, path });
         }
-        return list;
-    };
+        if (list.length > 0) return list;
 
-    /**
-     * 投稿 ID を読む。
-     *
-     * @param {Element} root
-     * @returns {string|null}
-     */
-    const postId = (root) => /^IllustItem_(\d+)$/.exec(root.id)?.[1] ?? null;
+        const cid = postId(root);
+        const placeholder = root.querySelector(THUMB);
+        const path = [...shownSigned.keys()].find((p) => belongsTo(p, cid));
+        return placeholder && path ? [{ el: placeholder, path }] : [];
+    };
 
     /**
      * 投稿者のユーザー ID を読む。名前のリンク（/{ユーザーID}/）が無ければページの URL から取ります。
@@ -132,31 +186,48 @@
     };
 
     /**
+     * 投稿のパスワード欄に、利用者が入力した値。欄が無ければ空文字。
+     *
+     * @param {Element} root
+     * @returns {string}
+     */
+    const passwordOf = (root) => root.querySelector("input.IllustItemExpandPass")?.value ?? "";
+
+    /**
      * 署名付き URL を、ページと同じ方法で受け取る。失敗したら空の Map。
      *
      * @param {string} uid - ユーザー ID
      * @param {string} cid - 投稿 ID
+     * @param {string} pass - パスワード欄に入っている値（無ければ空文字）
      * @returns {Promise<Map<string, string>>} 原寸画像のパス → 署名付き URL
      */
-    const signedUrls = async (uid, cid) => {
-        // AD=-1 は「投稿のすべての画像」。PAS=yes は、解除済みの投稿でページ自身が送る値です
-        // （パスワードそのものではなく、解除済みかどうかはサーバー側が Cookie で判断します）。
-        const body = new URLSearchParams({ ID: uid, TD: cid, AD: "-1", PAS: "yes" });
+    const signedUrls = async (uid, cid, pass) => {
+        // AD=-1 は「投稿のすべての画像」。PAS には、ページ自身と同じく投稿のパスワード欄の値を
+        // そのまま送ります（パスワードの無い投稿では空）。値を推測したり補ったりはしません。
+        // 空でない値を送ると、パスワードの無い投稿でも照合に失敗して画像が返ってきません。
+        const body = new URLSearchParams({ ID: uid, TD: cid, AD: "-1", PAS: pass });
         const urls = new Map();
 
         try {
             const res = await pageFetch(`${location.origin}/f/ShowIllustDetailF.jsp`, {
                 method: "POST",
                 credentials: "same-origin",
-                headers: { "X-Requested-With": "XMLHttpRequest" },
+                headers: {
+                    "Accept": "application/json, text/javascript, */*; q=0.01",
+                    "X-Requested-With": "XMLHttpRequest",
+                },
                 body,
             });
             if (!res.ok) return urls;
 
             // 応答は HTML か、HTML を含む JSON です。どちらでも URL を拾えるよう、エスケープを戻してから探します。
+            // JSON の \uXXXX（Java の JSON ライブラリは "=" や "&" もこの形にします）と \/、
+            // HTML の文字参照（&amp; や &#61; など）を元の文字に戻します。&amp; は二重に戻さないよう最後です。
             const text = (await res.text())
+                .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
                 .replace(/\\\//g, "/")
-                .replace(/\\u0026/gi, "&")
+                .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+                .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)))
                 .replace(/&amp;/g, "&");
 
             for (const [url] of text.matchAll(CDN_URL)) {
@@ -173,18 +244,31 @@
     /**
      * メディア一覧（アダプタの getMedia）。並びは画面（DOM）のサムネイルと同じです。
      * 画面に無い画像は、たとえ応答に含まれていても保存しません（閲覧できている分だけを保存するため）。
+     * ただし拡大表示で見えていたこの投稿の画像は、サムネイルに無くても後ろに足します。
      *
      * @param {Element} root
      * @param {object} post - readPost の結果
      * @returns {Promise<(object|null)[]>}
      */
     const getMedia = async (root, post) => {
+        collectShown();
         const shown = thumbs(root);
         if (shown.length === 0) return [];
 
-        const urls = await signedUrls(post.screenName, post.postId);
+        // ページ内で見えていた署名付き URL を優先し、足りないときだけ問い合わせます。
+        const urls = new Map(shownSigned);
+        if (shown.some(({ path }) => !urls.has(path))) {
+            for (const [path, url] of await signedUrls(post.screenName, post.postId, passwordOf(root))) {
+                if (!urls.has(path)) urls.set(path, url);
+            }
+        }
 
-        return shown.map(({ path }) => {
+        const paths = shown.map(({ path }) => path);
+        for (const path of shownSigned.keys()) {
+            if (belongsTo(path, post.postId) && !paths.includes(path)) paths.push(path);
+        }
+
+        return paths.map((path) => {
             const url = urls.get(path);
             if (!url) return null;
 
@@ -202,7 +286,9 @@
         });
     };
 
-    SMDCore.start({
+    collectShown();
+
+    const { refresh } = SMDCore.start({
         site: "poipiku",
         postRoot: POST_ROOT,
         mediaContainers: (root) => thumbs(root).map(({ el }) => el.parentElement ?? el), // <img> の中には置けないので親（リンク）へ
@@ -222,4 +308,13 @@
          */
         watch: `${THUMB}, .IllustItemThubExpand, .IllustItemCommandSub`,
     });
+
+    // 拡大表示は投稿の外にあり、SMDCore はそこの変化を見ていません。
+    // 新しい署名付き画像が出たときだけ、ボタンを見直してもらいます。
+    const overlay = document.querySelector(OVERLAY);
+    if (overlay) {
+        new MutationObserver(() => {
+            if (collectShown()) refresh();
+        }).observe(overlay, { childList: true, subtree: true, attributes: true, attributeFilter: ["src"] });
+    }
 })();

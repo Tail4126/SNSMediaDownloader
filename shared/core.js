@@ -725,7 +725,8 @@ globalThis.SMDCore = (() => {
      * 拡張機能の動作を開始する。各サイトのスクリプトはこれを 1 回呼ぶだけです。
      *
      * @param {SiteAdapter} adapter
-     * @returns {void}
+     * @returns {{refresh: () => void}} refresh は、すべての投稿のボタンを見直す。
+     *   投稿の外の変化でメディアの数が変わるサイト（ポイピクの拡大表示など）が呼びます
      */
     const start = (adapter) => {
         // <html data-smd-site="x"> のような目印を付け、CSS でサイトごとのアクセント色を切り替えます。
@@ -924,6 +925,7 @@ globalThis.SMDCore = (() => {
         });
 
         markAll();
+        return { refresh: markAll };
     };
 
     return { start, request };

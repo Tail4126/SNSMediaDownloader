@@ -357,6 +357,8 @@ are enough to build a working download URL — you just lose the nicer metadata.
 The thumbnails on a Poipiku post are 640-pixel previews (`cdn.poipiku.com/{user}/{file}_640.jpg`).
 The full-size file is behind a CloudFront signed URL (`…/{file}?Expires=…&Signature=…`), which is
 what the page itself requests from `/f/ShowIllustDetailF.jsp` when you click an image to enlarge it.
+Like the page, it sends the post's password box (`PAS`) as it is: empty for an ordinary post, and the
+password you typed for a password-protected one. Sending anything else makes Poipiku return no images.
 When you press save, the adapter sends that same request **once**, with your own session, picks the
 signed URLs out of the reply and matches them to the thumbnails on screen by file name.
 
@@ -365,6 +367,12 @@ locked or warning post (`/img/…`) are ignored, and nothing is unlocked on your
 follower-only or age-gated post gets buttons only once you've opened it yourself. If you aren't
 signed in, Poipiku doesn't hand out full-size URLs, so nothing can be saved. The page carries no
 post date, so the date placeholders are empty.
+
+A single-image warning post is a special case: unlocking it jumps straight to the enlarged view, and
+the thumbnail on the page stays a warning image. The enlarged view (`#DetailOverlay`) sits outside the
+post, so the adapter watches it separately. Once it shows a signed image belonging to this post, the
+warning thumbnail gets a button for that image and the URL already on screen is used directly, with
+no extra request. The URL is remembered, so closing the enlarged view doesn't take the button away.
 
 ### Injecting the buttons
 
