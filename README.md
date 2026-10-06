@@ -91,7 +91,8 @@ There's no build step. The repository *is* the extension — download it and loa
 
 Open any post with an image on [x.com](https://x.com/) or [bsky.app](https://bsky.app/).
 A ⬇️ button should appear in the row with reply / repost / like. On [poipiku.com](https://poipiku.com/)
-it appears next to the share / bookmark buttons of a post's own page. Click it, and a counter appears
+it appears next to the share / bookmark buttons of each post, on a post's own page and in the
+こそフォロ (secret-follow) list. Click it, and a counter appears
 in the bottom-left corner; once the save finishes, the button turns into a green check mark.
 
 ---
@@ -177,8 +178,8 @@ than one you have to click for. A few details worth knowing:
 * Avatars, banners, and anything that isn't post media.
 * **On Poipiku: anything you haven't unlocked.** Password, follower-only, age-gated and warning
   posts only get buttons for the images you can already see. The extension never enters a password
-  or opens a post for you. Buttons appear only on a post's own page (`/{user}/{post}.html`), not in
-  lists or timelines.
+  or opens a post for you. Buttons appear only on a post's own page (`/{user}/{post}.html`) and in the
+  こそフォロ list (`/MyHomePcV.jsp`), not in other lists or timelines.
 
 ---
 
@@ -551,8 +552,8 @@ setting — both have to be off for silent saving.
 **On Poipiku: "Could not get the media URL."**
 You need to be signed in to Poipiku — the full-size URLs are only handed out to a signed-in
 session. For a locked post (password, follower-only, age-gated, warning), open it first; only
-images that are already visible on the page are saved. Buttons only appear on a post's own page,
-not in lists.
+images that are already visible on the page are saved. Buttons only appear on a post's own page
+and in the こそフォロ list, not in other lists.
 
 **Settings reset themselves on another machine.**
 They're stored in `storage.sync` and follow your browser profile. If two devices disagree, the

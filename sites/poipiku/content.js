@@ -2,7 +2,8 @@
 /**
  * sites/poipiku/content.js
  * ==================================================================
- * ポイピク用のアダプタ。投稿詳細ページ（/{ユーザーID}/{投稿ID}.html）だけで動きます。
+ * ポイピク用のアダプタ。投稿詳細ページ（/{ユーザーID}/{投稿ID}.html）と、こそフォロの一覧
+ * （/MyHomePcV.jsp）で動きます。どちらも投稿 1 件ごとに同じ形の枠（.IllustItem）が並びます。
  *
  * 画面のサムネイル（…/{ファイル名}_640.jpg）は縮小版で、原寸画像は CloudFront の署名付き URL
  * （…/{ファイル名}?Expires=…&Signature=…）でしか取得できません。署名付き URL は、ページ自身が
@@ -21,12 +22,15 @@
 (() => {
     "use strict";
 
-    /** 投稿詳細ページのパス。[1] がユーザー ID、[2] が投稿 ID */
-    const PAGE_PATH = /^\/(\d+)\/(\d+)\.html$/;
+    /**
+     * ボタンを付けるページのパス。
+     *   - 投稿詳細ページ … /{ユーザーID}/{投稿ID}.html
+     *   - こそフォロの一覧 … /MyHomePcV.jsp（?PG=1 などのページ送りも同じパス）
+     */
+    const PAGES = [/^\/\d+\/\d+\.html$/, /^\/MyHomePcV\.jsp$/];
 
-    // 一覧やタイムラインでは動かしません（ボタンは投稿詳細ページだけ）。
-    const page = PAGE_PATH.exec(location.pathname);
-    if (!page) return;
+    // それ以外のページ（新着・ユーザーページなど）では動かしません。
+    if (!PAGES.some((re) => re.test(location.pathname))) return;
 
     /** 投稿 1 件のコンテナ */
     const POST_ROOT = '.IllustItem[id^="IllustItem_"]';
@@ -141,14 +145,17 @@
     };
 
     /**
-     * 投稿者のユーザー ID を読む。名前のリンク（/{ユーザーID}/）が無ければページの URL から取ります。
+     * 投稿者のユーザー ID を読む。一覧では投稿ごとに投稿者が違うので、ページの URL ではなく
+     * 投稿の中から取ります。名前のリンク（/{ユーザーID}/）を優先し、無ければサムネイルの
+     * onclick（showIllustDetail(ユーザーID, 投稿ID, …)）から取ります。
      *
      * @param {Element} root
-     * @returns {string}
+     * @returns {string|null}
      */
     const userId = (root) => {
         const href = root.querySelector(".IllustItemUserName a")?.getAttribute("href") ?? "";
-        return /^\/(\d+)\//.exec(href)?.[1] ?? page[1];
+        const onclick = root.querySelector("a.IllustItemThumb")?.getAttribute("onclick") ?? "";
+        return /^\/(\d+)\//.exec(href)?.[1] ?? /showIllustDetail\(\s*(\d+)/.exec(onclick)?.[1] ?? null;
     };
 
     /**
@@ -173,11 +180,12 @@
      */
     const readPost = (root) => {
         const id = postId(root);
-        if (!id) return null;
+        const uid = userId(root);
+        if (!id || !uid) return null;
 
         return {
             site: "poipiku",
-            screenName: userId(root),
+            screenName: uid,
             postId: id,
             name: root.querySelector(".IllustItemUserName")?.textContent.trim() ?? "",
             text: readText(root),
