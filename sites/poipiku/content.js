@@ -162,9 +162,10 @@
         }
         if (list.length > 0) return list;
 
+        // keys() が返す反復子の find() で探すので、探すためだけの配列は作りません。
         const cid = postId(root);
         const placeholder = root.querySelector(THUMB);
-        const path = [...shownSigned.keys()].find((p) => belongsTo(p, cid));
+        const path = shownSigned.keys().find((p) => belongsTo(p, cid));
         return placeholder && path ? [{ el: placeholder, path }] : [];
     };
 

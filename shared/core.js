@@ -4,7 +4,7 @@
  * ==================================================================
  * サイトに依存しない共通処理（globalThis.SMDCore）。
  *
- * X 用・Bluesky 用のスクリプトは「アダプタ」を 1 つ作って SMDCore.start() に渡すだけです。
+ * 各サイト用のスクリプトは「アダプタ」を 1 つ作って SMDCore.start() に渡すだけです。
  * ボタンの描画、保存の流れ、エラー通知（トースト）、いいね連動保存、
  * ダウンロード数カウンター、保存済みボタンの表示は、すべてこのファイルが引き受けます。
  *
@@ -16,13 +16,14 @@
  *   5. 頼んだ分がすべて終わると smdBatch が届き、ボタンの「保存中」を解いて、失敗があれば知らせる
  *
  * 【速さのための工夫】
- * X も Bluesky も DOM が絶えず変わるので、ボタンの差し込みは次の 3 点で軽くしています。
+ * X も Bluesky も DOM が絶えず変わるので、ボタンの差し込みは次のようにして軽くしています。
  *   - 変化があった投稿だけを、次の描画フレームでまとめて見直す（画面全体は走査しない）
  *   - 見直しは「読む段階」と「書く段階」に分ける。要素の大きさを読むとブラウザは
  *     レイアウトを計算し直すため、読みと書きを交互にすると投稿の数だけ計算が走ってしまう
- *   - 付けたボタンは WeakMap で覚えておき、DOM を探し直さない
+ *   - 付けたボタンと、その番号・見た目は WeakMap で覚えておき、DOM を探し直さず、属性にも書かない
  *     （WeakMap は要素が消えれば一緒に消えるので、メモリも溜まらない）
  *   - ボタンに関係しない変化（動画の再生時間の表示など）は、見直しの対象にしない
+ *   - DOM の変化を受け取る処理は、ページのあらゆる変化で呼ばれるので、できるだけ少ない手数で見送る
  *   - クリックの受け取りは document の 1 か所にまとめ、ボタンごとにリスナーを付けない
  *   - アイコンは 1 度だけ作って複製する（毎回 HTML として解析しない）
  * ==================================================================
@@ -110,8 +111,8 @@ globalThis.SMDCore = (() => {
     /** この拡張機能が作るボタンを選ぶセレクタ */
     const BUTTONS = ".smd-button, .smd-item-button";
 
-    /** この拡張機能が作る要素のクラス。DOM の変化のうち、自分で起こしたものを見分けるのに使います */
-    const OWN_CLASSES = ["smd-button", "smd-item-button", "smd-counter", "smd-toast"];
+    /** この拡張機能が作る要素（ボタン・カウンター・トースト）を選ぶセレクタ */
+    const OWN = `${BUTTONS}, .smd-counter, .smd-toast`;
 
     /**
      * background.js へメッセージを送り、返事を待つ。
@@ -140,12 +141,17 @@ globalThis.SMDCore = (() => {
     const mount = (el) => (document.body ?? document.documentElement).appendChild(el);
 
     /**
-     * この拡張機能が作った要素か。
+     * この拡張機能が作った要素か。DOM の変化のうち、自分で起こしたものを見分けるのに使います。
      *
-     * @param {Node} node
+     * ページのあらゆる変化で呼ばれるので、クラスを 1 つずつ調べるのではなく、matches() の 1 回で済ませます。
+     * classList は、初めて触った要素ごとにクラスの一覧を表すオブジェクトが作られ、その要素が消えるまで
+     * 残ります（Chromium 141 での計測では、1 要素あたり 168 バイト）。matches() なら何も作られないので、
+     * 速さだけでなくメモリの面でも軽く済みます。
+     *
+     * @param {Element} el
      * @returns {boolean}
      */
-    const isOwn = (node) => node.nodeType === 1 && OWN_CLASSES.some((name) => node.classList.contains(name));
+    const isOwn = (el) => el.matches(OWN);
 
     // ================================================================
     // トースト（エラー通知）
@@ -277,8 +283,8 @@ globalThis.SMDCore = (() => {
     // ================================================================
 
     /**
-     * カウンターの要素と、数字を書き換える場所。初めて表示するときに作ります。
-     * @type {{el: HTMLElement, nums: Record<string, HTMLElement>, failed: HTMLElement}|null}
+     * カウンターの要素と、数字の入った文字ノード。初めて表示するときに作ります。
+     * @type {{el: HTMLElement, nums: Record<string, Text>, failed: HTMLElement}|null}
      */
     let counter = null;
 
@@ -288,7 +294,8 @@ globalThis.SMDCore = (() => {
     /**
      * カウンターの要素を作る。
      * 文言は翻訳ファイルから取り、textContent で入れるので HTML として解釈されません。
-     * 数字を書き換える要素は覚えておき、更新のたびに探し直さないようにします。
+     * 数字は、文字ノードを 1 つずつ作って覚えておきます。更新のたびに探し直さずに済み、
+     * 書き換えるのも文字ノードの中身だけになります（setNumber() 参照）。
      *
      * @returns {NonNullable<typeof counter>}
      */
@@ -308,13 +315,31 @@ globalThis.SMDCore = (() => {
             text.className = "smd-counter-label";
             text.textContent = SMD.t(label);
 
-            nums[name] = item.appendChild(document.createElement("span"));
-            nums[name].className = "smd-counter-num";
+            const num = item.appendChild(document.createElement("span"));
+            num.className = "smd-counter-num";
+
+            nums[name] = num.appendChild(document.createTextNode(""));
             items[name] = item;
         }
 
         mount(el);
         return { el, nums, failed: items.failed };
+    };
+
+    /**
+     * カウンターの数字を、変わったときだけ書き換える。
+     *
+     * 要素の textContent に代入すると、中の文字ノードが新しいものに取り替えられ、「子が増減した」という
+     * DOM の変化として、この拡張機能自身の MutationObserver まで起こしてしまいます。
+     * 文字ノードの中身（data）を書き換えるだけなら、ノードはそのままで、子の増減にもなりません。
+     *
+     * @param {Text} node - 数字の入った文字ノード
+     * @param {number} value
+     * @returns {void}
+     */
+    const setNumber = (node, value) => {
+        const text = String(value);
+        if (node.data !== text) node.data = text;
     };
 
     /**
@@ -335,19 +360,16 @@ globalThis.SMDCore = (() => {
             return;
         }
 
-        if (!counter) {
-            counter = createCounter();
+        counter ??= createCounter();
 
-            // レイアウトを一度確定させてからクラスを付けます。
-            // 作成と同時に付けると、下からふわっと出る transition が効かないためです。
-            void counter.el.offsetWidth;
-        }
-
-        counter.nums.pending.textContent = String(pending);
-        counter.nums.done.textContent = String(done);
-        counter.nums.failed.textContent = String(failed);
+        setNumber(counter.nums.pending, pending);
+        setNumber(counter.nums.done, done);
+        setNumber(counter.nums.failed, failed);
         counter.failed.hidden = failed === 0; // 失敗は 1 件以上のときだけ並べます
 
+        // 作った直後にクラスを付けても、下からふわっと出る動きは付きます。
+        // 「現れる前の見た目」を content.css の @starting-style で決めてあるためで、
+        // 動きを付けるためだけにレイアウトを計算させる必要がありません。
         counter.el.classList.add("smd-counter-show");
         if (pending <= 0) counterTimer = setTimeout(() => counter.el.classList.remove("smd-counter-show"), wait);
     };
@@ -459,6 +481,25 @@ globalThis.SMDCore = (() => {
     const rootKeys = new WeakMap();
 
     /**
+     * @typedef {object} ButtonInfo ボタン 1 個について覚えておくこと
+     * @property {number} index - 個別ボタンの番号（0 始まり）。メインボタンは -1
+     * @property {boolean|null} done - 最後に描いたとき保存済みだったか。まだ描いていなければ null
+     * @property {string} badge - 最後に描いた枚数バッジの文字（出していなければ空）
+     */
+
+    /**
+     * ボタン → そのボタンについて覚えておくこと。
+     *
+     * 番号や見た目を data-* 属性に書いておく方法もありますが、属性の読み書きは遅く
+     * （dataset は読むたびに属性名を組み立てて探します）、書けば、属性の変化を見張っている
+     * ページ側の MutationObserver まで起こしてしまいます。
+     * WeakMap なら JavaScript の中だけで済み、使うメモリも少なく、ボタンが消えれば一緒に消えます。
+     * ここに無いボタンは、この拡張機能（のこの起動）が作ったものではありません。
+     * @type {WeakMap<HTMLButtonElement, ButtonInfo>}
+     */
+    const buttonInfo = new WeakMap();
+
+    /**
      * ツールチップの文言のメモ。翻訳の取り出しを毎回繰り返さないよう、1 度作ったら使い回します。
      * キーは「番号:保存済みか」で、メインボタンの番号は -1 です。
      * @type {Map<string, string>}
@@ -486,21 +527,21 @@ globalThis.SMDCore = (() => {
 
     /**
      * ダウンロードボタンを作る。アイコン・枚数バッジ・ツールチップは look() が付けます。
-     * クリックは start() が document でまとめて受け取るので、ここではリスナーを付けません
+     * クリックは watchClicks() が document でまとめて受け取るので、ここではリスナーを付けません
      * （ボタンが何百個あっても、リスナーは 1 つで済みます）。
      *
-     * @param {number|null} only - null ならメインボタン、数値ならその番号の個別ボタン
+     * @param {number} index - 個別ボタンの番号（0 始まり）。メインボタンは -1
      * @returns {HTMLButtonElement}
      */
-    const button = (only) => {
+    const button = (index) => {
         const el = document.createElement("button");
 
         // type="button" を明示しないと、フォーム内に置かれたとき送信ボタン扱いになります。
         el.type = "button";
-        el.className = only === null ? "smd-button" : "smd-item-button";
+        el.className = index < 0 ? "smd-button" : "smd-item-button";
 
-        // 個別ボタンには番号を覚えさせます（どれを保存するか、描き分け、番号が合っているかの確認に使います）。
-        if (only !== null) el.dataset.smdIndex = String(only);
+        // 番号を覚えておきます（どれを保存するか、描き分け、番号が合っているかの確認に使います）。
+        buttonInfo.set(el, { index, done: null, badge: "" });
 
         return el;
     };
@@ -531,18 +572,18 @@ globalThis.SMDCore = (() => {
      * MutationObserver の反応が起きるため、変わったときだけ書きます。
      *
      * @param {HTMLButtonElement} el
+     * @param {ButtonInfo} info - このボタンについて覚えていること（描いた見た目をここに書き留めます）
      * @param {boolean} done - 保存済みか
      * @param {string} badge - 枚数バッジの文字（空なら出さない）
-     * @param {number} index - 個別ボタンの番号。メインボタンは -1
      * @returns {void}
      */
-    const look = (el, done, badge, index) => {
-        const sign = `${done ? 1 : 0}|${badge}`;
-        if (el.dataset.smdLook === sign) return;
+    const look = (el, info, done, badge) => {
+        if (info.done === done && info.badge === badge) return;
 
-        el.dataset.smdLook = sign;
+        info.done = done;
+        info.badge = badge;
         el.classList.toggle("smd-done", done);
-        el.title = titleOf(index, done);
+        el.title = titleOf(info.index, done);
 
         if (badge) {
             const count = document.createElement("span");
@@ -605,7 +646,7 @@ globalThis.SMDCore = (() => {
         if (media.length >= 2) {
             media.forEach((el, index) => {
                 const btn = itemButtons.get(el);
-                if (btn?.isConnected && mine(btn) && btn.dataset.smdIndex === String(index)) {
+                if (btn?.isConnected && mine(btn) && buttonInfo.get(btn).index === index) {
                     plan.keep.push(btn);
                     return;
                 }
@@ -641,7 +682,7 @@ globalThis.SMDCore = (() => {
         const buttons = [...keep];
 
         if (bar) {
-            const el = button(null);
+            const el = button(-1);
             bar.append(el);
             mainButtons.set(root, el);
             buttons.push(el);
@@ -660,16 +701,57 @@ globalThis.SMDCore = (() => {
         // 保存済みかどうかで描き分けます。
         const { mask, total, saved } = progressOf(key, count);
         for (const el of buttons) {
-            if (el.classList.contains("smd-button")) {
-                // 一部だけ保存済みなら「2/4」、それ以外は総数（1 件なら出さない）。
+            const info = buttonInfo.get(el);
+
+            if (info.index < 0) {
+                // メインボタン: 一部だけ保存済みなら「2/4」、それ以外は総数（1 件なら出さない）。
                 const partial = saved > 0 && saved < total;
                 const badge = total > 1 ? (partial ? `${saved}/${total}` : String(total)) : "";
-                look(el, total > 0 && saved >= total, badge, -1);
+                look(el, info, total > 0 && saved >= total, badge);
             } else {
-                const index = Number(el.dataset.smdIndex);
-                look(el, hasBit(mask, index), "", index);
+                look(el, info, hasBit(mask, info.index), "");
             }
         }
+    };
+
+    // ================================================================
+    // ボタンのクリック
+    // ================================================================
+
+    /**
+     * ボタンのクリックを document でまとめて受け取り、保存を始める。
+     *
+     * キャプチャフェーズ（第 3 引数 true）の document は、ページ側のどの要素よりも先に受け取れるので、
+     * SNS 側の処理（投稿を開く、画像を拡大する等）が動く前に止められます。
+     * mousedown も止めるのは、押した瞬間に反応する処理があるためです。
+     *
+     * @param {SiteAdapter} adapter
+     * @returns {void}
+     */
+    const watchClicks = (adapter) => {
+        document.addEventListener("mousedown", (e) => {
+            if (e.target instanceof Element && e.target.closest(BUTTONS)) e.stopPropagation();
+        }, true);
+
+        document.addEventListener("click", (e) => {
+            const el = e.target instanceof Element ? e.target.closest(BUTTONS) : null;
+            if (!el) return;
+
+            e.preventDefault();
+            e.stopImmediatePropagation();
+
+            // 覚えの無いボタン（拡張機能を更新する前に作られて残ったものなど）は、番号が分からないので見送ります。
+            // 保存中も受け付けません。CSS の pointer-events: none はマウスにしか効かず、
+            // キーボード（Enter / Space）での連打は止められないため、ここでも確かめます。
+            const root = el.closest(adapter.postRoot);
+            const info = buttonInfo.get(el);
+            if (!root || !info || el.classList.contains("smd-busy")) return;
+
+            el.classList.add("smd-busy");
+            save(adapter, root, info.index < 0 ? null : info.index)
+                .catch(() => toast(SMD.t("toastCommError")))
+                .finally(() => el.classList.remove("smd-busy"));
+        }, true);
     };
 
     // ================================================================
@@ -741,37 +823,19 @@ globalThis.SMDCore = (() => {
      *   投稿の外の変化でメディアの数が変わるサイト（ポイピクの拡大表示など）が呼びます
      */
     const start = (adapter) => {
+        // DOM の変化のたびに使うセレクタは、先にアダプタから取り出しておきます。
+        const { postRoot, watch } = adapter;
+
+        /**
+         * このサイトの記録のキーの頭（"x:" など）。
+         * background の記録と知らせは全サイト分がまとめて届くので、このサイトのものを見分けるのに使います。
+         */
+        const prefix = `${adapter.site}:`;
+
         // <html data-smd-site="x"> のような目印を付け、CSS でサイトごとのアクセント色を切り替えます。
         document.documentElement.dataset.smdSite = adapter.site;
 
-        // ボタンのクリックを document でまとめて受け取ります。
-        // キャプチャフェーズ（第 3 引数 true）の document は、ページ側のどの要素よりも先に受け取れるので、
-        // SNS 側の処理（投稿を開く、画像を拡大する等）が動く前に止められます。
-        // mousedown も止めるのは、押した瞬間に反応する処理があるためです。
-        document.addEventListener("mousedown", (e) => {
-            if (e.target instanceof Element && e.target.closest(BUTTONS)) e.stopPropagation();
-        }, true);
-
-        document.addEventListener("click", (e) => {
-            const el = e.target instanceof Element ? e.target.closest(BUTTONS) : null;
-            if (!el) return;
-
-            e.preventDefault();
-            e.stopImmediatePropagation();
-
-            // 保存中は受け付けません。CSS の pointer-events: none はマウスにしか効かず、
-            // キーボード（Enter / Space）での連打は止められないため、ここでも確かめます。
-            const root = el.closest(adapter.postRoot);
-            if (!root || el.classList.contains("smd-busy")) return;
-
-            const only = el.classList.contains("smd-item-button") ? Number(el.dataset.smdIndex) : null;
-
-            el.classList.add("smd-busy");
-            save(adapter, root, only)
-                .catch(() => toast(SMD.t("toastCommError")))
-                .finally(() => el.classList.remove("smd-busy"));
-        }, true);
-
+        watchClicks(adapter);
         watchLikes(adapter);
 
         /** 次の描画フレームで見直す投稿 */
@@ -839,23 +903,46 @@ globalThis.SMDCore = (() => {
             frame ||= requestAnimationFrame(flush);
         };
 
-        /** ページ内の全投稿に印を付ける（起動時と、記録をまとめて受け取ったとき） */
+        /** ページ内の全投稿に印を付ける（起動時と、アダプタから refresh() が呼ばれたとき） */
         const markAll = () => {
-            for (const root of document.querySelectorAll(adapter.postRoot)) mark(root);
+            for (const root of document.querySelectorAll(postRoot)) mark(root);
         };
 
         /**
-         * 追加・削除された要素のうち、ボタンに関係するもの（adapter.watch に当てはまる要素か、
-         * それを含む要素）があるか。自前の要素と、文字だけの変化は関係ありません。
-         * adapter.watch が無ければ、自前の要素以外は何でも関係ありとみなします。
+         * ページ内の投稿のうち、最後に描いたときの記録のキーが条件に合うものにだけ印を付ける。
+         * 保存済みの見た目を描き直す必要があるのは、その記録に関わる投稿だけだからです。
+         *
+         * @param {(key: string|null|undefined) => boolean} wanted - キーを受け取り、見直すなら true を返す関数
+         * @returns {void}
+         */
+        const markByKey = (wanted) => {
+            for (const root of document.querySelectorAll(postRoot)) {
+                if (wanted(rootKeys.get(root))) mark(root);
+            }
+        };
+
+        /**
+         * 要素が、ボタンに関係するもの（adapter.watch に当てはまる要素か、それを含む要素）か。
+         * adapter.watch が無ければ、どの要素も関係ありとみなします。
+         *
+         * @param {Element} el
+         * @returns {boolean}
+         */
+        const matters = (el) => !watch || el.matches(watch) || el.querySelector(watch) !== null;
+
+        /**
+         * 削除された要素の中に、ボタンに関係するものがあるか。自前の要素と、文字だけの変化は関係ありません。
+         *
+         * NodeList は for...of ではなく添字でたどります。for...of は 1 回まわすごとに
+         * 小さなオブジェクトを作るので、空や 1 件のことが多いこの一覧では、添字のほうが数倍速く済みます。
          *
          * @param {NodeList} nodes
          * @returns {boolean}
          */
         const touches = (nodes) => {
-            for (const node of nodes) {
-                if (node.nodeType !== 1 || isOwn(node)) continue;
-                if (!adapter.watch || node.matches(adapter.watch) || node.querySelector(adapter.watch)) return true;
+            for (let i = 0; i < nodes.length; i += 1) {
+                const node = nodes[i];
+                if (node.nodeType === 1 && !isOwn(node) && matters(node)) return true;
             }
             return false;
         };
@@ -868,14 +955,14 @@ globalThis.SMDCore = (() => {
             if (message?.type === "smdUpdate") {
                 showCounts(message.counts);
 
+                // 保存できた 1 件。知らせは X・Bluesky・ポイピクのどのタブにも届くので、
+                // ほかのサイトのものは覚えず、投稿を探すこともしません。
                 const saved = message.saved;
-                if (typeof saved?.key === "string") {
+                if (typeof saved?.key === "string" && saved.key.startsWith(prefix)) {
                     remember(saved.key, saved.index, saved.total);
 
                     // その投稿を表示しているところだけ描き直します。
-                    for (const root of document.querySelectorAll(adapter.postRoot)) {
-                        if (rootKeys.get(root) === saved.key) mark(root);
-                    }
+                    markByKey((key) => key === saved.key);
                 }
             }
 
@@ -890,11 +977,18 @@ globalThis.SMDCore = (() => {
         // 開いた時点のカウンターと記録をもらいます。
         // 再読み込みしたり別のタブを開いたりしても、保存中の数と保存済みの見た目が引き継がれます。
         request({ type: "smdState" }).then((state) => {
-            for (const [key, value] of Object.entries(state?.history ?? {})) {
-                if (Number.isSafeInteger(value)) ledger.set(key, value);
+            // 記録のうち、このサイトのものだけを写します。
+            // for...in で直接たどるのは、Object.entries() だと記録の件数ぶんの配列を作ってしまうためです。
+            const history = state?.history ?? {};
+            for (const key in history) {
+                const value = history[key];
+                if (key.startsWith(prefix) && Number.isSafeInteger(value)) ledger.set(key, value);
             }
             showCounts(state?.counts);
-            markAll();
+
+            // 記録が届く前に描いた投稿のうち、記録のあるものだけを見直します
+            // （記録が空なら、どの投稿の見た目も変わらないので何もしません）。
+            if (ledger.size > 0) markByKey((key) => ledger.has(key));
         }).catch(() => {});
 
         // DOM の変化から、見直しが必要な投稿だけを拾います。
@@ -904,30 +998,60 @@ globalThis.SMDCore = (() => {
         //   - 投稿の中の画像の src・動画の poster・リンクの href が変わった → その投稿
         //     （メディアとして数えられるようになる、または要素の使い回しで別の投稿を表示し始めたため）
         // 自分でボタンを付けたり描き直したりした変化も、見直しの対象にしません（無駄な繰り返しを防ぐ）。
+        //
+        // ここはページのあらゆる変化で呼ばれます。X ではスクロールするだけで毎秒何百件も届くので、
+        // 関係のない変化は、できるだけ少ない手数で見送ります。
         new MutationObserver((records) => {
             for (const record of records) {
                 const target = record.target;
+
+                // 属性（src / poster / href）の変化。自前の要素はこれらの属性を持たないので、
+                // 自分で起こした変化かどうかは確かめるまでもありません。
+                if (record.type === "attributes") {
+                    const root = target.closest(postRoot);
+                    if (root) mark(root);
+                    continue;
+                }
+
+                // ここから下は、子の増減（childList）です。
                 if (target.nodeType !== 1 || isOwn(target)) continue;
 
-                if (record.type === "childList") {
-                    // 投稿そのものが追加された場合
-                    for (const node of record.addedNodes) {
-                        if (node.nodeType !== 1 || !node.firstElementChild || isOwn(node)) continue;
-                        if (node.matches(adapter.postRoot)) mark(node);
-                        else for (const root of node.querySelectorAll(adapter.postRoot)) mark(root);
+                // どの投稿の中の変化か（投稿の外なら null）。
+                // その投稿に関係のある要素が増減したかどうかを、これから調べる必要があるか。
+                // 投稿の外の変化と、もう見直すことが決まっている投稿の中の変化は、調べるまでもありません。
+                // （メディアの中身の変化、たとえば動画プレイヤーの再生時間の表示は拾いません。
+                //   置き場所の大きさが後から決まる場合は、flush のやり直しで拾います）
+                const root = target.closest(postRoot);
+                let undecided = root !== null && !dirty.has(root);
+
+                // 追加された要素を 1 回だけたどり、次の 2 つをまとめて調べます
+                // （NodeList を添字でたどる理由は touches() と同じです）。
+                const added = record.addedNodes;
+                for (let i = 0; i < added.length; i += 1) {
+                    const node = added[i];
+                    if (node.nodeType !== 1 || isOwn(node)) continue;
+
+                    // 1. 投稿そのものが追加された場合（子を持たない要素は、投稿ではありません）。
+                    //    中に投稿があるかを querySelector で先に確かめるのは、無いとき（ほとんどの場合）に
+                    //    querySelectorAll の結果を入れる一覧を作らずに済むからです。
+                    if (node.childElementCount > 0) {
+                        if (node.matches(postRoot)) {
+                            mark(node);
+                        } else if (node.querySelector(postRoot) !== null) {
+                            const roots = node.querySelectorAll(postRoot);
+                            for (let j = 0; j < roots.length; j += 1) mark(roots[j]);
+                        }
                     }
 
-                    // 投稿の中の変化。関係のある要素が増減したときだけ拾います。
-                    // （メディアの中身の変化、たとえば動画プレイヤーの再生時間の表示は拾いません。
-                    //   置き場所の大きさが後から決まる場合は、flush のやり直しで拾います）
-                    const root = target.closest(adapter.postRoot);
-                    if (!root || dirty.has(root)) continue;
-                    if (touches(record.addedNodes) || touches(record.removedNodes)) mark(root);
-                } else {
-                    // 属性（src / poster / href）の変化
-                    const root = target.closest(adapter.postRoot);
-                    if (root) mark(root);
+                    // 2. 投稿の中に、ボタンに関係する要素が追加された場合
+                    if (undecided && matters(node)) {
+                        mark(root);
+                        undecided = false;
+                    }
                 }
+
+                // 3. 投稿の中から、ボタンに関係する要素が削除された場合
+                if (undecided && touches(record.removedNodes)) mark(root);
             }
         }).observe(document.documentElement, {
             childList: true,

@@ -37,9 +37,6 @@ globalThis.SMD = (() => {
         likeDownload: false,        // 「いいね」と同時に保存するか（押した覚えのない保存は驚きが大きいので既定はオフ）
     };
 
-    /** 1.3.0 までの既定のファイル名。保存されていれば、今の既定値に読み替えます */
-    const LEGACY_DEFAULT_FILE = "{site}/{user}-{id}-{datetime}-{kind}{n}.{ext}";
-
     /**
      * このブラウザの downloads API が受け付ける conflictAction の値。
      * Firefox は "prompt"（保存先を尋ねる）を実装しておらず、指定すると保存がすべて失敗するため外します。
@@ -60,12 +57,8 @@ globalThis.SMD = (() => {
     const loadSettings = async () => {
         const s = await chrome.storage.sync.get(DEFAULTS).catch(() => DEFAULTS);
 
-        // 以前の既定値がそのまま保存されている場合は、今の既定値に読み替えます
-        // （投稿日時の無いポイピクで「--」が残らないよう、{datetime} を条件ブロックで囲んだもの）。
-        const file = s.file === LEGACY_DEFAULT_FILE ? DEFAULTS.file : s.file;
-
         return {
-            file: typeof file === "string" ? file : DEFAULTS.file,
+            file: typeof s.file === "string" ? s.file : DEFAULTS.file,
             conflictAction: CONFLICT_ACTIONS.includes(s.conflictAction) ? s.conflictAction : DEFAULTS.conflictAction,
             alwaysSaveAs: s.alwaysSaveAs === true,
             likeDownload: s.likeDownload === true,
@@ -79,8 +72,23 @@ globalThis.SMD = (() => {
     /**
      * 見た目上の 1 文字（絵文字の結合も含む）単位で文字列を区切るための道具。
      * 絵文字や「👨‍👩‍👧」のような結合文字を途中で切らないために使います。
+     *
+     * 作るときに文字の区切り方のデータを読み込むため、ページを開いた直後だと 10 ミリ秒前後かかります
+     * （Chromium 141 での計測）。このファイルは X・Bluesky・ポイピクのページを開くたびに読み込まれますが、
+     * 区切る必要があるのは長い名前を切り詰めるときだけです。そこで読み込み時には作らず、
+     * 初めて使うときに作ります（graphemes() 参照）。
+     * @type {Intl.Segmenter|undefined}
      */
-    const segmenter = new Intl.Segmenter();
+    let segmenter;
+
+    /**
+     * 文字列を、見た目上の 1 文字ずつに区切る。
+     * 返ってくるのは「先頭から順に 1 文字ずつ取り出せるもの」で、途中でやめれば残りは調べません。
+     *
+     * @param {string} text
+     * @returns {Intl.Segments}
+     */
+    const graphemes = (text) => (segmenter ??= new Intl.Segmenter()).segment(text);
 
     /**
      * UTF-8 にしたときのバイト数を数える。
@@ -121,7 +129,7 @@ globalThis.SMD = (() => {
 
         let out = "";
         let count = 0;
-        for (const { segment } of segmenter.segment(text)) {
+        for (const { segment } of graphemes(text)) {
             if (count === n) break;
             out += segment;
             count += 1;
@@ -142,7 +150,7 @@ globalThis.SMD = (() => {
 
         let out = "";
         let size = 0;
-        for (const { segment } of segmenter.segment(text)) {
+        for (const { segment } of graphemes(text)) {
             size += utf8Length(segment);
             if (size > maxBytes) break;
             out += segment;
