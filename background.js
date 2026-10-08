@@ -3,8 +3,11 @@
  * background.js
  * ==================================================================
  * バックグラウンドスクリプト。
- * Chrome では Service Worker、Firefox ではイベントページとして動きます
- * （manifest.json の background に両方を書いてあり、各ブラウザが自分の使うほうを選びます）。
+ * Chrome では Service Worker、Firefox ではイベントページとして動きます。
+ * manifest.json の background には service_worker と scripts の両方を書いてあり、どちらもこのファイルを
+ * 指しています。Chrome は service_worker を、Firefox は scripts を使い、もう片方は無視します
+ * （どちらも 121 以降の動きです）。ブラウザ専用の manifest-chrome.json と manifest-firefox.json には、
+ * それぞれ自分が使うほうだけを書いてあります。
  *
  * ページ上の content script にはできない仕事を、ここで引き受けます。
  *   - chrome.downloads によるファイル保存（1 件ずつ順番に。失敗時の再試行と後片付けを含む）
@@ -691,6 +694,16 @@ chrome.windows.onRemoved.addListener(async () => {
     if (!windows || windows.some((w) => w.incognito)) return;
 
     const { state, history } = await load();
+
+    // シークレット側に何も残っていなければ、消すものも書き出すものもありません。
+    // このイベントは通常ウィンドウを閉じたときにも届き、ほとんどの場合はここで終わります。
+    const counts = state.counts.i;
+    const used = Object.keys(history.i).length > 0
+        || state.jobs.some((job) => job.ctx === "i")
+        || Object.values(state.batches).some((batch) => batch.ctx === "i")
+        || counts.pending + counts.done + counts.failed + counts.hideAt > 0;
+    if (!used) return;
+
     history.i = {};
     state.jobs = state.jobs.filter((job) => job.ctx !== "i");
     for (const [id, batch] of Object.entries(state.batches)) {

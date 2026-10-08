@@ -70,10 +70,9 @@ There's no build step. The repository *is* the extension — download it and loa
 
 ### 🦊 Firefox
 
-> **First, swap the manifest.** Copy `manifest-firefox.json` over `manifest.json`, replacing it.
-> The Chrome manifest declares a service-worker background, which Firefox doesn't support — load
-> it as-is and the extension installs but silently does nothing, because there's no background
-> script to run the downloads.
+> `manifest.json` works in Firefox as it is — there's nothing to swap. Firefox may list warnings
+> about the Chrome-only keys in it (such as `minimum_chrome_version` or `background.service_worker`);
+> it simply ignores those keys, and the extension works normally.
 
 **A. Temporary install (easiest, but disappears when you close Firefox)**
 
@@ -581,10 +580,13 @@ extension collects nothing. Firefox only understands it from **140** onwards, an
 guidance is to set `strict_min_version` to match so the extension can't install somewhere the
 declaration would be silently ignored.
 
-There are separate manifests for Chrome (`manifest.json`, plus its original,
-`manifest-chrome.json`) and for Firefox (`manifest-firefox.json`). They differ in exactly three
-keys: how the background is declared (a service worker on Chrome, an event page on Firefox), and
-the browser-specific key on each side (`minimum_chrome_version` / `browser_specific_settings`).
+`manifest.json` is written to load as it is in both browsers. It carries the browser-specific key
+for each side (`minimum_chrome_version` for Chrome, `browser_specific_settings` for Firefox) and
+declares the background both ways: `service_worker`, which Chrome uses, and `scripts`, which Firefox
+runs as an event page. Each browser ignores the half meant for the other — both have accepted this
+since version 121, well below the floors above. `manifest-chrome.json` and `manifest-firefox.json`
+are single-browser versions that keep only their own side of those three keys; everything else is
+identical across all three.
 
 **Firefox for Android is not supported.** The `downloads` API — which is the entire point of this
 extension — is documented inconsistently there, and `saveAs: true` is known to raise an error.
@@ -619,9 +621,9 @@ Full details in [PRIVACY.md](PRIVACY.md).
 ### Project layout
 
 ```
-manifest.json             Extension manifest (MV3) — a byte-for-byte copy of manifest-chrome.json
-manifest-chrome.json      Chrome variant: minimum_chrome_version, service-worker background
-manifest-firefox.json     Firefox variant: browser_specific_settings, event-page background
+manifest.json             Extension manifest (MV3) — loads as-is in both Chrome and Firefox
+manifest-chrome.json      Chrome-only version: minimum_chrome_version, service-worker background
+manifest-firefox.json     Firefox-only version: browser_specific_settings, event-page background
 background.js             Service worker: download queue (retries, resumes after being stopped), counter, saved-media record, Bluesky API, DID → PDS resolution, caching
 popup.html/.css/.js       Settings UI (also serves as the options page)
 content.css               Button, toast and counter styles, injected into every site
@@ -654,7 +656,7 @@ icons/
 ### Adding a site
 
 Write an adapter with those keys, add its content-script entry (and any `host_permissions`)
-to `manifest.json`, add the site to the `SITE` map in `shared/template.js` so `{site}` renders
+to all three manifests, add the site to the `SITE` map in `shared/template.js` so `{site}` renders
 sensibly, and add an accent-colour block to `content.css`. `shared/core.js` shouldn't need to
 change.
 

@@ -67,10 +67,9 @@ API キーも、外部サービスも、ZIP の解凍も、「この投稿を当
 
 ### 🦊 Firefox
 
-> **先にマニフェストを差し替えてください。** `manifest-firefox.json` を `manifest.json` へ
-> 上書きコピーします。Chrome 版のマニフェストはバックグラウンドをサービスワーカーとして
-> 宣言しており、Firefox はこれに対応していません。そのまま読み込むとインストール自体は
-> 通りますが、バックグラウンドが起動しないため、ダウンロードも API 取得も一切動きません。
+> `manifest.json` は Firefox でもそのまま読み込めます。差し替えは要りません。
+> Chrome 用のキー（`minimum_chrome_version` や `background.service_worker`）について警告が
+> 表示されることがありますが、Firefox はそれらを無視するだけで、動作には影響しません。
 
 **A. 一時的な読み込み（手軽ですが、Firefox を閉じると消えます）**
 
@@ -570,10 +569,12 @@ Firefox 側の下限だけは、JavaScript や CSS の機能ではありませ�
 Firefox がこのキーを解釈できるのは **140 以降**で、Mozilla 自身も、宣言が黙って無視される環境に
 インストールされないよう `strict_min_version` を合わせることを推奨しています。
 
-マニフェストは Chrome 用（`manifest.json` と、その原本の `manifest-chrome.json`）と
-Firefox 用（`manifest-firefox.json`）に分かれています。違いは、バックグラウンドの宣言
-（Chrome はサービスワーカー、Firefox はイベントページ）と、ブラウザごとの設定キー
-（`minimum_chrome_version` と `browser_specific_settings`）の 3 つだけです。
+`manifest.json` は、どちらのブラウザでもそのまま読み込めるように書いてあります。ブラウザごとの
+設定キー（Chrome 用の `minimum_chrome_version` と Firefox 用の `browser_specific_settings`）を両方持ち、
+バックグラウンドも、Chrome が使う `service_worker` と、Firefox がイベントページとして使う `scripts` の
+両方で宣言しています。どちらのブラウザも相手用の部分は無視します（Chrome・Firefox とも 121 以降の動きで、
+上の下限より前から使えます）。`manifest-chrome.json` と `manifest-firefox.json` は、この 3 つのキーのうち
+自分の側だけを残したブラウザ専用版で、それ以外は 3 つとも同じ内容です。
 
 **Android 版 Firefox には対応していません。** この拡張機能の根幹である `downloads` API の
 サポート状況がドキュメント上でも一貫しておらず、`saveAs: true` はエラーになることが
@@ -608,9 +609,9 @@ Firefox 用（`manifest-firefox.json`）に分かれています。違いは、�
 ### ファイル構成
 
 ```
-manifest.json             拡張機能マニフェスト（MV3）— manifest-chrome.json と完全に同一
-manifest-chrome.json      Chrome 用: minimum_chrome_version・サービスワーカー
-manifest-firefox.json     Firefox 用: browser_specific_settings・イベントページ
+manifest.json             拡張機能マニフェスト（MV3）— Chrome でも Firefox でもそのまま読み込める
+manifest-chrome.json      Chrome 専用版: minimum_chrome_version・サービスワーカー
+manifest-firefox.json     Firefox 専用版: browser_specific_settings・イベントページ
 background.js             サービスワーカー: 保存の順番待ち（再試行つき・止められても再開）/ カウンター / 保存済みの記録 / Bluesky API / DID→PDS 解決 / キャッシュ
 popup.html/.css/.js       設定画面（オプションページも兼用）
 content.css               ボタン・トースト・カウンターのスタイル（全サイトへ注入）
@@ -642,7 +643,7 @@ icons/
 
 ### サイトを追加するには
 
-上記のキーを持つアダプタを書き、`manifest.json` にコンテンツスクリプトの項目
+上記のキーを持つアダプタを書き、3 つのマニフェストすべてにコンテンツスクリプトの項目
 （必要なら `host_permissions` も）を追加し、`{site}` が意味のある文字列になるよう
 `shared/template.js` の `SITE` 表に追記し、`content.css` にアクセント色のブロックを足します。
 `shared/core.js` は触らずに済むはずです。

@@ -3,12 +3,20 @@
 
     "name": "__MSG_extName__",
     "short_name": "__MSG_extName__",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "description": "__MSG_extDesc__",
 
     "default_locale": "en",
 
     "minimum_chrome_version": "126",
+
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "@snsmediadownloader-tail4126",
+            "data_collection_permissions": { "required": ["none"] },
+            "strict_min_version": "140.0"
+        }
+    },
 
     "icons": {
         "16": "icons/16.png",
@@ -84,11 +92,11 @@
     ],
 
     "background": {
-        "service_worker": "background.js"
+        "service_worker": "background.js",
+        "scripts": [ "background.js" ]
     },
 
     "action": {
-        "default_title": "__MSG_actionTitle__",
         "default_popup": "popup.html"
     },
 

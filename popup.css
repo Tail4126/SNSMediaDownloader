@@ -248,7 +248,7 @@ input[type = "text"]:focus
 
 #preview b
 {
-    /* 幅を固定することで、4 行のファイル名の開始位置が縦にそろいます */
+    /* 幅を固定することで、各行のファイル名の開始位置が縦にそろいます */
     flex: none;
     width: 96px;
     color: var(--muted);

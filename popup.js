@@ -38,6 +38,16 @@
     const esc = (s) => String(s).replace(/[<>&"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
     /**
+     * 何度も使う要素。入力のたびに探し直さないよう、ここで 1 度だけ取り出しておきます
+     * （このスクリプトは defer 付きで読み込まれるので、この時点で要素はすべて出来上がっています）。
+     */
+    const fileInput = $("file");
+    const preview = $("preview");
+    const warning = $("warning");
+    const status = $("status");
+    const placeholders = $("placeholders");
+
+    /**
      * 設定項目の id と、値を読み書きするプロパティの対応表。
      * チェックボックスだけは value ではなく checked を使います。
      * ここに 1 行足すだけで、読み込み・保存・リセットのすべてに反映されます。
@@ -146,7 +156,7 @@
         const now = new Date();
 
         // ユーザーの入力を含む値は、必ず esc() を通してから innerHTML に入れます。
-        $("preview").innerHTML = SAMPLES.map(([label, ctx]) =>
+        preview.innerHTML = SAMPLES.map(([label, ctx]) =>
             `<div><b>${esc(label)}</b><code>${esc(SMD.buildPath(settings, { ...ctx, now }))}</code></div>`
         ).join("");
 
@@ -156,14 +166,17 @@
         const bare = SMD.dropEscaped(settings.file);
         if ((bare.match(/\[/g) ?? []).length !== (bare.match(/\]/g) ?? []).length) warnings.push(t("warnBracket"));
 
+        // テンプレートに書かれた変数名（同じ変数を 2 回書いても 1 つに数えます）
+        const tokens = new Set(SMD.tokensIn(settings.file));
+
         // 知らない変数が無いか
-        const unknown = [...new Set(SMD.tokensIn(settings.file))].filter((n) => !SMD.VARIABLE_NAMES.includes(n));
+        const unknown = [...tokens].filter((n) => !SMD.VARIABLE_NAMES.includes(n));
         if (unknown.length > 0) warnings.push(t("warnUnknown", unknown.map((n) => `{${n}}`).join(" ")));
 
         // 拡張子が抜けていないか（{ext:4} のような文字数制限つきの書き方も、{ext} として数えます）
-        if (!SMD.tokensIn(settings.file).includes("ext")) warnings.push(t("warnNoExt"));
+        if (!tokens.has("ext")) warnings.push(t("warnNoExt"));
 
-        $("warning").textContent = warnings.join(" / ");
+        warning.textContent = warnings.join(" / ");
     };
 
     // ================================================================
@@ -183,9 +196,9 @@
         saveTimer = 0;
 
         chrome.storage.sync.set(readForm()).then(() => {
-            $("status").classList.add("show");
+            status.classList.add("show");
             clearTimeout(statusTimer);
-            statusTimer = setTimeout(() => $("status").classList.remove("show"), 1200);
+            statusTimer = setTimeout(() => status.classList.remove("show"), 1200);
         }, () => {});
     };
 
@@ -219,7 +232,7 @@
     $("version").textContent = `v${chrome.runtime.getManifest().version}`;
 
     // 変数一覧のボタンを組み立てます。
-    $("placeholders").innerHTML = TOKENS.map(([group, tokens]) =>
+    placeholders.innerHTML = TOKENS.map(([group, tokens]) =>
         `<div class="ph-group"><h3>${esc(group)}</h3>` + tokens.map(([token, description]) =>
             `<button type="button" class="token" data-token="${esc(token)}">` +
             `<code>${esc(token)}</code><span>${esc(description)}</span></button>`
@@ -229,13 +242,12 @@
     // 変数ボタン: カーソル位置（選択範囲）に変数を挿入します。
     // ボタン 1 個ずつではなく親要素でまとめて受け取り（イベント委譲）、closest で押されたボタンを探します。
     // 表示用に "[ ]" と空けてある半角スペースは、挿入するときに取り除きます。
-    $("placeholders").addEventListener("click", (e) => {
+    placeholders.addEventListener("click", (e) => {
         const token = e.target.closest(".token")?.dataset.token;
         if (!token) return;
 
-        const input = $("file");
-        input.setRangeText(token.replace(/ /g, ""), input.selectionStart, input.selectionEnd, "end");
-        input.focus();
+        fileInput.setRangeText(token.replaceAll(" ", ""), fileInput.selectionStart, fileInput.selectionEnd, "end");
+        fileInput.focus();
         saveSoon();
     });
 
@@ -247,8 +259,8 @@
 
     // ファイル名は入力が止まってから保存し、欄を離れたときはすぐ保存します。
     // スイッチと選択肢は、押した瞬間に保存します。
-    $("file").addEventListener("input", saveSoon);
-    $("file").addEventListener("change", save);
+    fileInput.addEventListener("input", saveSoon);
+    fileInput.addEventListener("change", save);
     for (const id of ["conflictAction", "alwaysSaveAs", "likeDownload"]) $(id).addEventListener("change", save);
 
     // ポップアップは外をクリックしただけで閉じるので、保存待ちの入力があれば閉じる前に保存します。

@@ -41,10 +41,11 @@ as-is.
 * **No new permissions** beyond `downloads`, `storage` and `alarms` without discussing it in an issue first.
   Widening `host_permissions` counts.
 * **Manifest V3, latest Chrome and latest Firefox only.** No compatibility code for older versions
-  or other browsers — use current APIs directly (`chrome.*`, not `browser ?? chrome`). The Chrome
-  floor (`minimum_chrome_version`, now 126 because of `URL.parse`) tracks the newest API the code
-  uses: raise it when you start using something newer. Firefox's `strict_min_version` stays at 140
-  because of `data_collection_permissions`.
+  or other browsers — use current APIs directly (`chrome.*`, not `browser ?? chrome`). Firefox
+  accepts `chrome.*` too; Chrome only gained the `browser` namespace in 148, so switching to it
+  would mean raising the floor. The Chrome floor (`minimum_chrome_version`, now 126 because of
+  `URL.parse`) tracks the newest API the code uses: raise it when you start using something newer.
+  Firefox's `strict_min_version` stays at 140 because of `data_collection_permissions`.
 * **Assume the background script can be stopped at any moment.** Keep anything that must survive in
   `storage.session`, drive work from events and alarms, and never keep a message response waiting
   for a download to finish — Chrome stops a service worker whose single event runs past five
@@ -96,17 +97,19 @@ own. That's expected, not a bug.
 
 ### Which manifest is which
 
-`manifest-chrome.json` is the source of truth; `manifest.json` is a copy of it, and is what
-browsers actually load. Edit the former and copy it over the latter — **never the other way
-round.** After a Firefox test session `manifest.json` holds the *Firefox* content, so it can't be
-trusted as the original. `git checkout -- manifest.json` puts it back.
+`manifest.json` is the one you load, in Chrome and Firefox alike, as it is. It holds both
+browsers' keys — `minimum_chrome_version` for Chrome, `browser_specific_settings` for Firefox, and a
+`background` with both `service_worker` (Chrome) and `scripts` (Firefox) — and each browser
+ignores what isn't meant for it. `manifest-chrome.json` and `manifest-firefox.json` are
+single-browser versions that keep only their own side of those three keys. Everything else must be
+identical across all three, so a manifest change is made in all three files.
 
 ## Adding a site
 
 Write one adapter exposing `site` / `postRoot` / `mediaContainers()` / `readPost()` / `getMedia()` /
 `actionBar()`, and call `SMDCore.start()` with it. Then:
 
-* add the content-script entry (and any `host_permissions`) to `manifest.json`,
+* add the content-script entry (and any `host_permissions`) to all three manifests,
 * add the site to the `SITE` map in `shared/template.js` so `{site}` renders as something short,
 * add an accent-colour block keyed on `[data-smd-site="…"]` in `content.css`.
 
@@ -140,8 +143,8 @@ Some facts live in more than one file. Change only one and the project starts co
 | A setting, or its default | `shared/template.js` (`DEFAULTS`) · the row markup in `popup.html` · `popup.js` (`FIELDS`) · `_locales/*/messages.json`, all nine · the settings tables in `README.md` / `README.ja.md` |
 | A UI label or a toast | `_locales/*/messages.json`, all nine — the English file is the source of truth for the key set |
 | A site adapter's selectors | Nothing else, but say in the PR which page states you tested (timeline, thread, permalink, quote post) |
-| Adding a site | `manifest.json` · `SITE` in `shared/template.js` · `content.css` accent block · README (en/ja) · `.github/ISSUE_TEMPLATE/bug_report.yml` (the site dropdown) |
-| Anything in the manifest | `manifest-chrome.json` · `manifest.json` (copy it over) · `manifest-firefox.json` — the three differ in exactly three keys, and nothing else should ever diverge |
+| Adding a site | All three manifests · `SITE` in `shared/template.js` · `content.css` accent block · README (en/ja) · `.github/ISSUE_TEMPLATE/bug_report.yml` (the site dropdown) |
+| Anything in the manifest | `manifest.json` · `manifest-chrome.json` · `manifest-firefox.json`, all three — only `minimum_chrome_version`, `browser_specific_settings` and `background` may differ (`manifest.json` carries both sides of them), and nothing else should ever diverge |
 | What gets stored, which permissions are used, or which hosts are contacted | `PRIVACY.md` — the body **and** the "Last updated" date, in the same commit · the privacy sections of both READMEs |
 | The selectors an adapter's `mediaContainers()`, `postId()` or `actionBar()` rely on | That adapter's `watch` selector too — only changes matching it make the buttons look again, so a missing entry means buttons that don't appear or don't update |
 | What `getMedia()` returns | Keep it in the same order as `mediaContainers()`, with `null` for unknown items — item buttons, the saved-media record and `{n}` all rely on the position |
@@ -209,6 +212,8 @@ JSON ファイル（`manifest.json`、`_locales/*/messages.json`）は対象外�
   必要になったら、まず Issue で相談してください。
 * **Manifest V3、最新の Chrome と最新の Firefox のみ。** 古いバージョンや他のブラウザ向けの
   互換処理は書きません。API はそのまま使います（`browser ?? chrome` ではなく `chrome.*`）。
+  `chrome.*` は Firefox でも使えます。`browser` 名前空間は Chrome では 148 からなので、
+  切り替えるなら下限を上げることになります。
   Chrome の下限（`minimum_chrome_version`。今は `URL.parse` のため 126）は、コードが使う
   最も新しい API に合わせます。より新しいものを使い始めたら引き上げてください。
   Firefox の `strict_min_version` は `data_collection_permissions` のため 140 のままにします。
@@ -262,12 +267,15 @@ JSON ファイル（`manifest.json`、`_locales/*/messages.json`）は対象外�
 サービスワーカーはアイドル状態で停止し、次のメッセージで再起動します。
 そのときキャッシュが空になるのは正常な挙動で、不具合ではありません。
 
-### どのマニフェストが正か
+### 3 つのマニフェスト
 
-正は `manifest-chrome.json` です。`manifest.json` はそのコピーで、ブラウザが実際に読むのは
-こちらです。編集は前者に対して行い、保存したら後者へコピーしてください。**逆はやらないこと。**
-Firefox で動作確認したあとの `manifest.json` には *Firefox 用の内容* が入っているため、
-原本として信用できません。戻すときは `git checkout -- manifest.json` です。
+読み込むのは `manifest.json` です。Chrome でも Firefox でも、そのまま使えます。
+両方のブラウザのキーを持っていて、Chrome 用の `minimum_chrome_version`、Firefox 用の
+`browser_specific_settings`、`background` には `service_worker`（Chrome が使う）と `scripts`
+（Firefox が使う）の両方を書いてあります。各ブラウザは、自分に関係のないものを無視します。
+`manifest-chrome.json` と `manifest-firefox.json` は、この 3 つのキーのうち自分の側だけを残した
+ブラウザ専用版です。それ以外の部分は 3 つで同じでなければならないので、マニフェストを変えるときは
+3 ファイルとも同じように直してください。
 
 ## サイトを追加する
 
@@ -280,7 +288,7 @@ Firefox で動作確認したあとの `manifest.json` には *Firefox 用の内
 状態で別のセレクタになっているのが普通です）。省略した場合、
 そのサイトではいいね連動保存だけが無効になり、他の動作には影響しません。
 
-* `manifest.json` にコンテンツスクリプトの項目（必要なら `host_permissions` も）を追加する
+* 3 つのマニフェストすべてにコンテンツスクリプトの項目（必要なら `host_permissions` も）を追加する
 * `shared/template.js` の `SITE` 表に追記し、`{site}` が短い文字列になるようにする
 * `content.css` に `[data-smd-site="…"]` を鍵とするアクセント色のブロックを足す
 
@@ -316,8 +324,8 @@ Bluesky のアダプタは、これを使って本文と投稿日時を API の�
 | 設定項目、その既定値 | `shared/template.js` の `DEFAULTS` ・ `popup.html` の行の記述 ・ `popup.js` の `FIELDS` ・ `_locales/*/messages.json` 9 言語 ・ README 英日の設定表 ・ `PRIVACY.md` §1.1 の保存内容の表（英日）|
 | UI の文言、トーストの文言 | `_locales/*/messages.json` 9 言語（キーの集合は英語版が基準） |
 | アダプタのセレクタ | 他は不要ですが、どのページ状態で確認したかをプルリクエストに書いてください（タイムライン・スレッド・パーマリンク・引用投稿） |
-| サイトの追加 | `manifest.json` ・ `shared/template.js` の `SITE` ・ `content.css` のアクセント色 ・ README 英日 ・ `.github/ISSUE_TEMPLATE/bug_report.yml` のサイト選択肢 |
-| マニフェストの内容 | `manifest-chrome.json` ・ `manifest.json`（コピーする） ・ `manifest-firefox.json` — 3 つの差分は 3 キーだけで、それ以外が食い違ってはいけません |
+| サイトの追加 | 3 つのマニフェストすべて ・ `shared/template.js` の `SITE` ・ `content.css` のアクセント色 ・ README 英日 ・ `.github/ISSUE_TEMPLATE/bug_report.yml` のサイト選択肢 |
+| マニフェストの内容 | `manifest.json` ・ `manifest-chrome.json` ・ `manifest-firefox.json` の 3 つすべて — 違ってよいのは `minimum_chrome_version`・`browser_specific_settings`・`background` だけで（`manifest.json` はその両方の側を持つ）、それ以外が食い違ってはいけません |
 | 保存内容、使用する権限、通信先 | `PRIVACY.md` の本文**および**「最終更新」日を、同じコミットで ・ README 英日のプライバシー節 |
 | アダプタの `mediaContainers()`・`postId()`・`actionBar()` が頼るセレクタ | そのアダプタの `watch` も合わせて直す — これに当てはまる変化でしかボタンを見直さないので、漏れがあるとボタンが出ない・更新されない原因になります |
 | `getMedia()` の戻り値 | `mediaContainers()` と同じ並びを保ち、分からないものは `null` にする — 個別ボタン・保存済みの記録・`{n}` がすべて位置に依存しています |

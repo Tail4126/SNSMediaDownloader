@@ -3,7 +3,7 @@
 
     "name": "__MSG_extName__",
     "short_name": "__MSG_extName__",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "description": "__MSG_extDesc__",
 
     "default_locale": "en",
@@ -88,7 +88,6 @@
     },
 
     "action": {
-        "default_title": "__MSG_actionTitle__",
         "default_popup": "popup.html"
     },
 

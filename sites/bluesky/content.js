@@ -24,6 +24,18 @@
     /** 引用投稿の枠 */
     const QUOTE = 'div[role="link"], div[aria-label^="Post by"]';
 
+    /**
+     * 要素の持ち主を決める境目（投稿のコンテナと引用の枠）。
+     * セレクタの文字列は、使うたびに組み立てるのではなく、ここで 1 度だけ作っておきます。
+     */
+    const SCOPE = `${POST_ROOT}, ${QUOTE}`;
+
+    /**
+     * メディアの持ち主を決める境目。上の 2 つに、外部リンク（リンク先のプレビュー画像を包んでいる）を加えたものです。
+     * メディア要素から親をたどって最初に当たるものが投稿のコンテナなら、その投稿自身のメディアです。
+     */
+    const MEDIA_SCOPE = `${SCOPE}, a[href^="http"]`;
+
     /** メディア要素。動画はサムネイル（poster 属性）に情報が入っています */
     const MEDIA = 'img[src*="//cdn.bsky.app/img/feed_"], video[poster*="//video.bsky.app/watch/"]';
 
@@ -54,7 +66,7 @@
      * @param {Element} root
      * @returns {boolean}
      */
-    const isQuoted = (el, root) => el.closest(`${QUOTE}, ${POST_ROOT}`) !== root;
+    const isQuoted = (el, root) => el.closest(SCOPE) !== root;
 
     /**
      * 投稿内の要素を探し、引用部分のものを除いて返す。
@@ -66,12 +78,41 @@
     const own = (selector, root) => [...root.querySelectorAll(selector)].filter((el) => !isQuoted(el, root));
 
     /**
-     * この投稿のメディア要素（img / video）。外部リンクのプレビュー画像は除きます。
+     * 投稿内の要素を探し、引用部分のものを除いた最初の 1 つを返す。
+     *
+     * まず querySelector で 1 つだけ探します。querySelector は見つけた時点で探すのをやめるので、
+     * 投稿の中を最後まで調べる querySelectorAll より軽く済みます。
+     * それが引用の中のものだったときだけ、全部を順に調べます。
+     *
+     * @param {string} selector
+     * @param {Element} root
+     * @returns {Element|null}
+     */
+    const firstOwn = (selector, root) => {
+        const first = root.querySelector(selector);
+        if (first === null || !isQuoted(first, root)) return first;
+
+        for (const el of root.querySelectorAll(selector)) {
+            if (!isQuoted(el, root)) return el;
+        }
+        return null;
+    };
+
+    /**
+     * この投稿のメディア要素（img / video）。引用部分のものと、外部リンクのプレビュー画像は除きます。
+     * 親をたどるのは 1 件につき 1 回だけです。最初に当たった境目がこの投稿のコンテナなら、
+     * 途中に引用の枠も外部リンクも無かった、と分かります。
      *
      * @param {Element} root
      * @returns {Element[]}
      */
-    const mediaElements = (root) => own(MEDIA, root).filter((el) => !el.closest('a[href^="http"]'));
+    const mediaElements = (root) => {
+        const found = [];
+        for (const el of root.querySelectorAll(MEDIA)) {
+            if (el.closest(MEDIA_SCOPE) === root) found.push(el);
+        }
+        return found;
+    };
 
     /**
      * 投稿自身のパスを探して分解する。
@@ -81,7 +122,7 @@
      */
     const matchPost = (root) => {
         // data-testid="feedItem-by-example.bsky.social" の "-by-" 以降が投稿者です。
-        const owner = /-by-(.+)$/.exec(root.dataset.testid ?? "")?.[1] ?? "";
+        const owner = /-by-(.+)$/.exec(root.getAttribute("data-testid") ?? "")?.[1] ?? "";
 
         /** 見つけたリンクが投稿者本人のものか（照合できないときは通す） */
         const isOwner = (m) => !owner || owner.startsWith("did:") || decode(m[1]) === owner;
@@ -115,7 +156,7 @@
             screenName: decode(match[1]),
             postId: match[2],
             name: "", // 表示名と日時は getMedia で API の結果から埋めます
-            text: own('[data-testid="postText"]', root)[0]?.textContent ?? "",
+            text: firstOwn('[data-testid="postText"]', root)?.textContent ?? "",
             time: null,
         };
     };
@@ -207,14 +248,16 @@
      * @returns {Element|null}
      */
     const actionBar = (root) => {
-        // 引用部分のボタンを拾わないよう、どれも own() で探します。
+        // 引用部分のボタンを拾わないよう、どれも firstOwn() で探します。
         // ブックマークボタンがあれば、その親が操作バーです。
-        const bookmark = own('[data-testid="postBookmarkBtn"]', root)[0];
+        const bookmark = firstOwn('[data-testid="postBookmarkBtn"]', root);
         if (bookmark?.parentElement) return bookmark.parentElement;
 
         // 無ければ、返信ボタンから親をたどって、いいねボタンも含む最初の要素を探します。
-        const like = own('[data-testid="likeBtn"], [data-testid="unlikeBtn"]', root)[0];
-        for (let n = own('[data-testid="replyBtn"]', root)[0]; like && n && n !== root; n = n.parentElement) {
+        const like = firstOwn('[data-testid="likeBtn"], [data-testid="unlikeBtn"]', root);
+        if (!like) return null;
+
+        for (let n = firstOwn('[data-testid="replyBtn"]', root); n && n !== root; n = n.parentElement) {
             if (n.contains(like)) return n;
         }
         return null;
