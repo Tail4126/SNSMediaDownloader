@@ -34,7 +34,7 @@ globalThis.SMDCore = (() => {
 
     /**
      * @typedef {object} PostInfo 投稿 1 件の情報
-     * @property {"x"|"bluesky"|"poipiku"} site - サイト
+     * @property {"x"|"bluesky"|"poipiku"|"privatter"|"privatterplus"} site - サイト
      * @property {string} screenName - ユーザー名 / ハンドル
      * @property {string} postId - 投稿 ID
      * @property {string} name - 表示名
@@ -53,7 +53,7 @@ globalThis.SMDCore = (() => {
 
     /**
      * @typedef {object} SiteAdapter サイトごとの差分を吸収するオブジェクト
-     * @property {"x"|"bluesky"|"poipiku"} site - サイト。保存済みの記録のキーと、CSS のアクセント色の切り替えに使う
+     * @property {"x"|"bluesky"|"poipiku"|"privatter"|"privatterplus"} site - サイト。保存済みの記録のキーと、CSS のアクセント色の切り替えに使う
      * @property {string} postRoot - 投稿 1 件のコンテナを選ぶ CSS セレクタ
      * @property {(root: Element) => Element[]} mediaContainers - メディアを包む要素（画面の並び順）
      * @property {(root: Element) => string|null} postId
@@ -955,7 +955,7 @@ globalThis.SMDCore = (() => {
             if (message?.type === "smdUpdate") {
                 showCounts(message.counts);
 
-                // 保存できた 1 件。知らせは X・Bluesky・ポイピクのどのタブにも届くので、
+                // 保存できた 1 件。知らせは X・Bluesky・ポイピク・Privatter・Privatter+ のどのタブにも届くので、
                 // ほかのサイトのものは覚えず、投稿を探すこともしません。
                 const saved = message.saved;
                 if (typeof saved?.key === "string" && saved.key.startsWith(prefix)) {

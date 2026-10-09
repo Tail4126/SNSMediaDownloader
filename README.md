@@ -4,7 +4,7 @@
 
 > **The media is already on your screen. This puts a save button next to it.**
 
-**SNS Media Downloader** is a browser extension for **X (Twitter)**, **Bluesky** and **Poipiku**.
+**SNS Media Downloader** is a browser extension for **X (Twitter)**, **Bluesky**, **Poipiku**, **Privatter** and **Privatter+**.
 
 It adds a download button to the action bar of every post that has media, and saves the
 **original** files — full-resolution images, the highest-bitrate video — straight to your
@@ -29,20 +29,21 @@ Saving one image from a post is a right-click away. Everything past that gets te
 
 ## ✨ Features
 
-* 🐦 **Three sites** — X (Twitter), Bluesky and Poipiku, each with its own adapter and accent colour.
+* 🐦 **Five sites** — X (Twitter), Bluesky, Poipiku, Privatter and Privatter+, each with its own adapter and accent colour.
 * 🖼️ **Originals, not previews** — `name=orig` for X images, the highest-bitrate MP4 variant for
   video, `com.atproto.sync.getBlob` straight from the author's PDS for Bluesky, and the signed
-  full-size URL the page itself uses for Poipiku.
+  full-size URL the page itself uses for Poipiku, and the full-size link already on the page for Privatter and Privatter+.
 * 🎯 **Whole post or one item** — the action-bar button saves everything; a small button on each
   thumbnail saves just that one (it appears once a post has two or more).
-* ❤️ **Save when you like** — optionally, liking a post (sending an emoji reaction, on Poipiku)
+* ❤️ **Save when you like** — optionally, liking a post (sending an emoji reaction, on Poipiku;
+  picking a reaction icon from ♡いいね, on Privatter; picking a reaction, on Privatter+)
   saves its media at the same time.
   **Off by default**; turn it on in settings when you want it.
 * 📊 **Progress and saved state at a glance** — a counter in the bottom-left corner shows
   *Pending* and *Done* (and *Failed*, if anything failed). Buttons for media you've saved turn into
   a green check mark, and stay that way across page changes and reloads until you close the browser.
 * 🏷️ **Filename templates** — 24 placeholders, subfolders, conditional blocks, per-variable length
-  limits, and a live preview of five sample posts while you type.
+  limits, and a live preview of seven sample posts while you type.
 * 🔁 **Failed transfers are retried** — up to three times, with a growing pause between attempts.
   Anything that still won't come down is reported as an error and cleared away, rather than left in
   your download folder as a broken file.
@@ -91,7 +92,10 @@ There's no build step. The repository *is* the extension — download it and loa
 Open any post with an image on [x.com](https://x.com/) or [bsky.app](https://bsky.app/).
 A ⬇️ button should appear in the row with reply / repost / like. On [poipiku.com](https://poipiku.com/)
 it appears next to the share / bookmark buttons of each post, on a post's own page and in the
-こそフォロ (secret-follow) and フォロータグ (followed-tags) lists. Click it, and a counter appears
+こそフォロ (secret-follow) and フォロータグ (followed-tags) lists. On [privatter.net](https://privatter.net/)
+it appears after the お気に入り / いいね / Share row of an image post (`/i/…`) or a text post with
+images in it (`/p/…`). On [privatter.me](https://privatter.me/) (Privatter+) it appears right after the
+リアクション / コメント (reactions / comments) tabs under a post (`/page/…`). Click it, and a counter appears
 in the bottom-left corner; once the save finishes, the button turns into a green check mark.
 
 ---
@@ -102,7 +106,7 @@ in the bottom-left corner; once the save finishes, the button turns into a green
 | :--- | :--- | :--- |
 | **Main button** | In the action bar, next to like / bookmark. Shows a small count badge when the post has more than one media item. | Every media item in the post |
 | **Item button** | Top-right corner of each thumbnail. Only appears when the post has **two or more** items. | That one item |
-| **The like button** | The site's own like button (on Poipiku, any emoji reaction button) — only when you switch this on in settings. | Every media item in the post |
+| **The like button** | The site's own like button (on Poipiku, any emoji reaction button; on Privatter, any reaction icon under ♡いいね; on Privatter+, any icon in the reaction picker) — only when you switch this on in settings. | Every media item in the post |
 
 ### The download counter
 
@@ -156,7 +160,10 @@ than one you have to click for. A few details worth knowing:
 
 * **Only liking triggers it.** Removing a like does nothing — the two states are different buttons
   underneath, and only the "not yet liked" one is watched. On Poipiku, every emoji reaction you
-  send counts as a like.
+  send counts as a like. On Privatter, picking any reaction icon (heart, paw, face…) from the panel
+  that ♡いいね opens counts as a like; opening the panel itself doesn't, and neither does ★お気に入り.
+  On Privatter+, picking any icon in the reaction picker counts as a like. Clicking a reaction that's
+  already been sent (which cancels it on Privatter+) and the bookmark button don't.
 * **Text-only posts are ignored silently.** No toast, no error. Nothing happens at all.
 * **A like never re-saves something already saved.** Like → unlike → like again produces one set
   of files, not two. The same goes for a post you saved with a button: if every item is saved, a
@@ -181,6 +188,12 @@ than one you have to click for. A few details worth knowing:
   pressing it just tells you to unlock the post first (a reaction on a locked post does nothing). Buttons appear only on a post's own page (`/{user}/{post}.html`) and in the
   こそフォロ / フォロータグ lists (`/MyHomePcV.jsp`, `/MyHomeTagPcV.jsp`), not in other lists or
   timelines (the お気に入り bookmark list uses a different layout).
+* **On Privatter: anything you haven't unlocked, and the lists.** A password or login-only post shows
+  no images until you open it yourself; once you do, the page reloads with the images and the buttons
+  appear. The extension never enters a password or signs in for you. Buttons appear only on image
+  posts (`/i/…`) and text posts (`/p/…`), not on user pages (`/u/…`) or other lists. Privatter+ works the
+  same way: a password-protected post gets buttons once you've entered the password and the page has
+  reloaded, and buttons appear only on posts (`/page/…`), not on user pages (`/user/…`) or other lists.
 
 ---
 
@@ -198,7 +211,7 @@ which produces, for the second image of a four-image X post:
 x/example_user-1234567890123456789-20260819_142530-img2.jpg
 ```
 
-Open the settings popup and the five sample previews update as you type, so you never have to
+Open the settings popup and the seven sample previews update as you type, so you never have to
 save a file to find out what the template does.
 
 ### Placeholders
@@ -207,14 +220,15 @@ save a file to find out what the template does.
 
 | Placeholder | Value |
 | :--- | :--- |
-| `{site}` | `x`, `bsky` or `poipiku` |
-| `{user}` | Screen name (X), handle (Bluesky) or numeric user ID (Poipiku) |
+| `{site}` | `x`, `bsky`, `poipiku`, `privatter` or `privatterplus` |
+| `{user}` | Screen name (X), handle (Bluesky), numeric user ID (Poipiku) or user name (Privatter, Privatter+) |
 | `{name}` | Display name |
-| `{id}` | Post ID |
-| `{text}` | Post body, with URLs removed |
+| `{id}` | Post ID. On Privatter, the post type plus its number — `i7962168` for an image post, `p12082367` for a text post (the two are numbered separately). On Privatter+, the post's ID from its URL (`6975d5e22c2c3`) |
+| `{text}` | Post body, with URLs removed. On Privatter, the caption of an image post, or the title of a text post. On Privatter+, the post's title |
 
 **Date & time** — the post's own timestamp, converted to your local timezone. Poipiku pages don't
-show when a post was made, so these are empty there (wrap them in `[ ]`, or use `{dl_datetime}`)
+show when a post was made, so these are empty there (wrap them in `[ ]`, or use `{dl_datetime}`).
+Privatter and Privatter+ show the time in Japan time, and it is read as such
 
 | Placeholder | Example |
 | :--- | :--- |
@@ -235,8 +249,8 @@ show when a post was made, so these are empty there (wrap them in `[ ]`, or use 
 | `{total}` | How many items the post has |
 | `{kind}` | `img` / `vid` / `gif` |
 | `{ext}` | `jpg`, `png`, `mp4`, `webm` … |
-| `{media_id}` | The original file's ID — the CID on Bluesky, the media hash on X, the file name on Poipiku |
-| `{res}` | `1280x720` for X video, the aspect ratio for Bluesky, `orig` for X images (empty on Poipiku) |
+| `{media_id}` | The original file's ID — the CID on Bluesky, the media hash on X, the file name on Poipiku, Privatter and Privatter+ |
+| `{res}` | `1280x720` for X video, the aspect ratio for Bluesky, `orig` for X images (empty on Poipiku, Privatter and Privatter+) |
 
 ### Syntax
 
@@ -376,12 +390,52 @@ post, so the adapter watches it separately. Once it shows a signed image belongi
 warning thumbnail gets a button for that image and the URL already on screen is used directly, with
 no extra request. The URL is remembered, so closing the enlarged view doesn't take the button away.
 
+### Privatter — the link is already on the page
+
+Privatter is the easy one. Each image on a post is a resized copy
+(`d2pqhom6oey9wx.cloudfront.net/img_resize/{file}`) wrapped in a lightbox link that points straight at
+the original (`…/img_original/{file}`, same file name). That URL needs no signature and no session,
+so the adapter makes **no requests of its own**: it reads the links already on the page. Images are
+lazy-loaded (the `src` is a blank GIF until you scroll to it, and the real URL sits in
+`data-original`), so the adapter looks at the link's `href`, then `data-original`, then `src`.
+
+A whole page is one post, and its content lives in the left column (`#left`). Text posts get the
+same treatment for any images embedded in the body. Password and login-only posts render a page
+without that column until they're unlocked, which reloads the page with the images in it, so a
+locked post simply has no buttons. The posting time is printed in Japan time
+(`2026-10-10 01:16:59`) and read as `+09:00`. Image and text posts are numbered separately, so the
+post ID carries a type letter (`i…` / `p…`) to keep the saved-state record from mixing them up.
+
+Each image link is an inline element wrapped around a block image, so its box doesn't cover the
+image. `content.css` turns only the links that carry an item button into image-sized blocks
+(centred when the image is), so the button lands on the image's corner and the page layout is
+otherwise unchanged.
+
+### Privatter+ — the same idea, on its own site
+
+Privatter+ (`privatter.me`) is a separate service with its own markup. A post lives at
+`/page/{id}`, and its images are lazy-loaded `<img>`s whose `src` — and the lightbox link around
+them — already point at the original (`media.privatter.me/img/{user number}/original/{file}`), so,
+again, the adapter makes no requests of its own. The post is the column that holds the body's
+divider (`hr#contents`); a password-protected post renders without it until it's unlocked, so a
+locked post has no buttons. The author link (`/user/{name}`) gives the user name and its text the
+display name, the title gives `{text}`, and the posting time is read as Japan time.
+
+The reaction picker and the list of reactions already sent use the same class, and clicking a sent
+reaction cancels it, so save-on-like only watches the picker (`#reaction_icons .add-reaction`).
+Images there are inline and separated by `<br>`, so the links that carry an item button become
+`inline-block` rather than blocks (a block would add a blank line). The main button goes right after
+the リアクション / コメント tabs under the post, because the share-button row at the top is missing on
+some posts; a post without the tabs falls back to the share row, then to the date box. The button is
+centred in the row, and its padding isn't counted towards the row's height, so nothing below shifts.
+
 ### Injecting the buttons
 
 X and Bluesky replace their timelines continuously as you scroll, so there's no load event to hook.
 A `MutationObserver` watches the whole document instead — but since the DOM never stops changing on
 either site, it never rescans the page. (Poipiku is a plain server-rendered page, but unlocking a
-post adds its images later, so it uses the same mechanism.) Only **the posts that changed** are looked at again:
+post adds its images later, so it uses the same mechanism. Privatter's images load lazily, and the
+same mechanism picks them up too.) Only **the posts that changed** are looked at again:
 
 * **Only relevant changes mark a post.** A post is marked when an element containing posts is
   added; when, inside a post, an element the buttons depend on (the adapter's `watch`: media, links
@@ -452,7 +506,7 @@ left off whenever it's woken**:
 Saves run **one at a time**, even across posts. Parallel transfers fail more often, and with
 *Always show the save dialog* on they'd open a stack of dialogs at once. The background script also
 checks every URL and file name itself: nothing but X's media hosts, Bluesky's `getBlob` and
-Poipiku's `cdn.poipiku.com` is downloaded, and nothing is written outside the downloads folder. Anything rejected counts as failed.
+Poipiku's `cdn.poipiku.com` and Privatter's `img_original` path on its CloudFront host and Privatter+'s `/img/{user number}/original/` path on `media.privatter.me` are downloaded, and nothing is written outside the downloads folder. Anything rejected counts as failed.
 
 Failures are retried — three times, waiting 0.3 s, then 0.8 s, then 1.5 s. Interruption reasons that
 can't change on a second attempt (a 404, a 403, no disk space, and so on) skip the retries and fail
@@ -465,7 +519,7 @@ a failure: it isn't added to *Failed*, and no toast appears.
 ### The counter and the saved-media record
 
 The counter is stored in `storage.session` alongside the queue, and every time a file changes
-state the background sends an `smdUpdate` message to every open X / Bluesky / Poipiku tab (a file that was
+state the background sends an `smdUpdate` message to every open X / Bluesky / Poipiku / Privatter / Privatter+ tab (a file that was
 just saved rides along in the same message, halving the number of messages). Because it's saved
 with the queue, the numbers stay right even if the background script is stopped and restarted. The
 background also decides *when* the counter should disappear (`hideAt`) and sends that along, so every
@@ -556,6 +610,12 @@ session. For a locked post (password, follower-only, age-gated, warning), open i
 images that are already visible on the page are saved. Buttons only appear on a post's own page
 and in the こそフォロ / フォロータグ lists, not in other lists.
 
+**On Privatter: no button appears.**
+Buttons only appear on image posts (`/i/…`) and text posts (`/p/…`) whose images you can see. For a
+password or login-only post, enter the password or sign in first; the page reloads with the images
+and the buttons appear. User pages (`/u/…`) and other lists get no buttons. On Privatter+, buttons
+appear only on posts (`/page/…`); for a password-protected post, enter the password first.
+
 **Settings reset themselves on another machine.**
 They're stored in `storage.sync` and follow your browser profile. If two devices disagree, the
 last write wins.
@@ -602,13 +662,14 @@ The extension asks for three permissions — `downloads` to save files (and to f
 completion, so failures can be retried and cleared away), `storage` to remember your four settings
 and, until the browser closes, which media you've saved and what's still queued, and `alarms` to
 check on a running download every 30 seconds — plus access to `x.com`, `twitter.com`, `bsky.app`,
-`public.api.bsky.app`, `plc.directory`, `poipiku.com` and `cdn.poipiku.com`.
+`public.api.bsky.app`, `plc.directory`, `poipiku.com`, `cdn.poipiku.com`, `privatter.net` and `privatter.me`.
 
 It does make network requests, and it's worth being precise about which: **only when a save is
 triggered** — by the download button, or by a like if you turned that on — and only to Bluesky's
 public API and the author's PDS, or, on Poipiku, to `poipiku.com` itself (the same request the page
-makes when you enlarge an image, sent with your Poipiku session) and its image server. On X it makes no requests of its own at all — it reads responses
-the page had already received. Which media you've saved is recorded only on your device, in
+makes when you enlarge an image, sent with your Poipiku session) and its image server. On X, Privatter
+and Privatter+ it makes no requests of its own apart from the download itself — it reads what the page
+had already received (on Privatter and Privatter+, the image links on the page). Which media you've saved is recorded only on your device, in
 `storage.session`, for the saved-state buttons — never synced, never sent, and cleared when the
 browser closes. What you view and which posts you like aren't recorded at all (a save triggered by a
 like is remembered as a save, nothing more), and nothing about what you view or save is transmitted.
@@ -633,6 +694,8 @@ sites/x/interceptor.js    MAIN world: wraps fetch / XHR to harvest media URLs
 sites/x/content.js        X adapter
 sites/bluesky/content.js  Bluesky adapter
 sites/poipiku/content.js  Poipiku adapter
+sites/privatter/content.js  Privatter adapter
+sites/privatterplus/content.js  Privatter+ adapter
 _locales/                 UI translations for 9 languages
 icons/
 ```
@@ -642,7 +705,7 @@ icons/
 
 | Key | Role |
 | :--- | :--- |
-| `site` | `"x"` / `"bluesky"` / `"poipiku"`. Selects the CSS accent colour via `<html data-smd-site>` |
+| `site` | `"x"` / `"bluesky"` / `"poipiku"` / `"privatter"` / `"privatterplus"`. Selects the CSS accent colour via `<html data-smd-site>` |
 | `postRoot` | Selector matching the container of a single post |
 | `mediaContainers(root)` | The elements wrapping each media item |
 | `postId(root)` | Just the post ID (or `null`), quickly. Called every time the buttons are repainted, so keep it light |

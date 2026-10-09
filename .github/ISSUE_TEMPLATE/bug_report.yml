@@ -35,6 +35,8 @@ body:
         - X (Twitter)
         - Bluesky
         - Poipiku / ポイピク
+        - Privatter
+        - Privatter+
         - More than one / 複数のサイト
         - Not site-specific — settings screen, etc. / サイトに依存しない（設定画面など）
     validations:

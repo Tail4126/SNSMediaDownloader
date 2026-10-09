@@ -74,7 +74,7 @@ globalThis.SMD = (() => {
      * 絵文字や「👨‍👩‍👧」のような結合文字を途中で切らないために使います。
      *
      * 作るときに文字の区切り方のデータを読み込むため、ページを開いた直後だと 10 ミリ秒前後かかります
-     * （Chromium 141 での計測）。このファイルは X・Bluesky・ポイピクのページを開くたびに読み込まれますが、
+     * （Chromium 141 での計測）。このファイルは X・Bluesky・ポイピク・Privatter・Privatter+ のページを開くたびに読み込まれますが、
      * 区切る必要があるのは長い名前を切り詰めるときだけです。そこで読み込み時には作らず、
      * 初めて使うときに作ります（graphemes() 参照）。
      * @type {Intl.Segmenter|undefined}
@@ -193,7 +193,7 @@ globalThis.SMD = (() => {
 
     /** メディア種別・サイト名をファイル名向けの短い表記へ */
     const KIND = { photo: "img", video: "vid", animated_gif: "gif" };
-    const SITE = { x: "x", bluesky: "bsky", poipiku: "poipiku" };
+    const SITE = { x: "x", bluesky: "bsky", poipiku: "poipiku", privatter: "privatter", privatterplus: "privatterplus" };
 
     /** 日時が取れなかったときの「全部空文字」の日時変数 */
     const NO_DATE = { yyyy: "", mm: "", dd: "", hh: "", mi: "", ss: "", date: "", time: "", datetime: "" };

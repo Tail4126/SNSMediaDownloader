@@ -3,7 +3,7 @@
 /*
  * content.css
  * ==================================================================
- * X・Bluesky・ポイピクのページに直接差し込まれるスタイル。
+ * X・Bluesky・ポイピク・Privatter・Privatter+ のページに直接差し込まれるスタイル。
  * ダウンロードボタン・通知（トースト）・ダウンロード数カウンターの見た目を定義します。
  *
  * ここが popup.css と決定的に違うのは「他人の家に間借りしている」点です。
@@ -53,6 +53,20 @@
 {
     --smd-accent: 52, 152, 219;
     --smd-idle: rgb(128, 128, 128);
+}
+
+/* Privatter（既定のテーマの見出しやボタンに近い、落ち着いた青） */
+[data-smd-site = "privatter"]
+{
+    --smd-accent: 68, 110, 155;
+    --smd-idle: rgb(128, 128, 128);
+}
+
+/* Privatter+（ボタンやリンクに使われている青） */
+[data-smd-site = "privatterplus"]
+{
+    --smd-accent: 13, 110, 253;
+    --smd-idle: rgb(108, 117, 125);
 }
 
 /* ------------------------------------------------------------------
@@ -159,6 +173,54 @@
 .smd-item-button:hover
 {
     background: rgba(var(--smd-accent), 0.9);
+}
+
+/*
+ * Privatter の画像は、行の中に置かれたリンク（<a>）の中に、ブロック表示の画像が入った形です。
+ * このままでは、リンクの箱が画像を包まないため、リンクに重ねた個別ボタンが画像の外（左側など）に
+ * 出てしまいます。そこで、個別ボタンを付けたリンクだけを、画像と同じ大きさのブロックにします。
+ *   - width: fit-content … 画像の幅に合わせて縮む（列より大きい画像は、max-width で列の幅まで）
+ *   - margin-inline: auto … 画像が中央寄せ（center-block）のときは、リンクごと中央へ置く
+ * 対象を「個別ボタンを含むリンク」に絞っているので、ボタンの無いページの見た目は変わりません。
+ */
+[data-smd-site = "privatter"] a:has(> .smd-item-button)
+{
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+}
+
+[data-smd-site = "privatter"] a:has(> .smd-item-button):has(> img.center-block)
+{
+    margin-inline: auto;
+}
+
+/*
+ * Privatter+ の画像は、行の中のリンクの中に、やはり行の中の画像が入った形です（画像の間は <br>）。
+ * 行の中の要素の箱は文字の高さしか無く、画像を包まないので、個別ボタンが画像の下のほうに出てしまいます。
+ * ブロックにすると <br> の分の空行が増えるため、ここでは行の中のまま箱を持つ inline-block にします。
+ * 縦の位置（vertical-align）は既定のベースラインのままなので、行の高さも画像の位置も変わりません。
+ */
+[data-smd-site = "privatterplus"] a:has(> .smd-item-button)
+{
+    display: inline-block;
+    max-width: 100%;
+}
+
+/*
+ * Privatter+ のメインボタンは、本文の下の「リアクション」「コメント」のタブの右横に置きます
+ * （タブの行が無い記事では、共有ボタンの行など）。
+ * メインボタン（当たり判定の余白を含めて高さ 30px）をそのまま置くと、置いた行が数ピクセル高くなって
+ * 下の内容がずれることがあるので、上下の余白の分だけ行の高さに数えないようにします。
+ * 見た目の大きさと押せる範囲は変わりません。
+ *   - align-self: center … タブの行は横並び（flex）なので、行の高さいっぱいに伸ばさず、縦の中央に置く
+ *   - vertical-align: middle … 共有ボタンの行など、文字の並びに置いたときも縦の中央に置く
+ */
+[data-smd-site = "privatterplus"] .smd-button
+{
+    margin-block: -6px;
+    align-self: center;
+    vertical-align: middle;
 }
 
 /* ------------------------------------------------------------------
