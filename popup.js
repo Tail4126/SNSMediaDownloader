@@ -107,7 +107,7 @@
     const blob = (cid) => `https://bsky.social/xrpc/com.atproto.sync.getBlob?did=did%3Aplc%3Aexample&cid=${cid}`;
 
     /**
-     * プレビューに出す 5 パターンのサンプル（X / Bluesky × 画像 / 動画、ポイピクの画像）。
+     * プレビューに出す 7 パターンのサンプル（X / Bluesky × 画像 / 動画、ポイピク・Privatter・Privatter+ の画像）。
      * 「複数枚のとき」と「1 枚のとき」の違い（{n?} など）も確かめられるようにしてあります。
      * ポイピクは投稿日時が取れないので、日時の変数が空になる様子も確かめられます。
      */
@@ -143,6 +143,18 @@
                 postId: "12345678", text: t("sampleText"), time: null },
             item: { url: "https://cdn.poipiku.com/001234567/012345678_012345679_AbCdEfGhI.png",
                 kind: "photo", ext: "png", id: "012345678_012345679_AbCdEfGhI", res: "", index: 2, total: 4 },
+        }],
+        [`${t("sitePrivatter")} · ${t("sampleImage11")}`, {
+            post: { site: "privatter", screenName: "example_user", name: t("sampleUserName"),
+                postId: "i1234567", text: t("sampleText"), time: "2026-08-19T14:25:30+09:00" },
+            item: { url: "https://d2pqhom6oey9wx.cloudfront.net/img_original/12345678906abcdef012345.jpg",
+                kind: "photo", ext: "jpg", id: "12345678906abcdef012345", res: "", index: 1, total: 1 },
+        }],
+        [`${t("sitePrivatterPlus")} · ${t("sampleImage24")}`, {
+            post: { site: "privatterplus", screenName: "example_user", name: t("sampleUserName"),
+                postId: "6975d5e22c2c3", text: t("sampleText"), time: "2026-08-19T14:25:30+09:00" },
+            item: { url: "https://media.privatter.me/img/123456/original/12345678906abcdef01234.png",
+                kind: "photo", ext: "png", id: "12345678906abcdef01234", res: "", index: 2, total: 4 },
         }],
     ];
 

@@ -52,6 +52,14 @@ const BSKY_BLOB_PATH = "/xrpc/com.atproto.sync.getBlob";
 /** ポイピクの画像を配信しているホスト */
 const POIPIKU_MEDIA_HOST = "cdn.poipiku.com";
 
+/** Privatter の画像を配信しているホストと、原寸画像のパスの頭 */
+const PRIVATTER_MEDIA_HOST = "d2pqhom6oey9wx.cloudfront.net";
+const PRIVATTER_MEDIA_PATH = "/img_original/";
+
+/** Privatter+ の原寸画像の URL の形（ホストと /img/{ユーザー番号}/original/） */
+const PRIVATTER_PLUS_MEDIA_HOST = "media.privatter.me";
+const PRIVATTER_PLUS_MEDIA_PATH = /^\/img\/\d+\/original\//;
+
 /**
  * このブラウザの downloads API が受け付ける conflictAction の値。
  * Firefox は "prompt"（保存先を尋ねる）を実装しておらず、指定するとエラーになるため外します。
@@ -83,7 +91,8 @@ const FATAL = new Set([
 ]);
 
 /** 状態の変化を知らせる先のタブ。manifest.json の content_scripts と同じ範囲です */
-const TAB_URLS = ["https://x.com/*", "https://twitter.com/*", "https://bsky.app/*", "https://poipiku.com/*"];
+const TAB_URLS = ["https://x.com/*", "https://twitter.com/*", "https://bsky.app/*", "https://poipiku.com/*",
+    "https://privatter.net/*", "https://privatter.me/*"];
 
 /** 待ちが 0 になってから、カウンターを表示し続ける時間（ミリ秒） */
 const LINGER = 5000;
@@ -284,6 +293,7 @@ const postOf = (did, rkey) => once(`post:${did}/${rkey}`, async () => {
  * X の URL は、ページ内のスクリプトが偽のメッセージで差し込める経路があるため、
  * X のメディア配信ホストだけに絞ります。Bluesky は投稿者の PDS（任意の https ホスト）から
  * 取得するので、ホストではなく getBlob のパスで判断します。ポイピクは画像の配信ホストだけに絞ります。
+ * Privatter と Privatter+ は、配信ホストに原寸画像以外のファイル（アイコンなど）もあるので、原寸画像のパスでも絞ります。
  * URL.parse は、解析できなければ例外ではなく null を返すので、1 回の解析で済みます。
  *
  * @param {unknown} url
@@ -293,7 +303,9 @@ const isMediaUrl = (url) => {
     const parsed = typeof url === "string" ? URL.parse(url) : null;
     return parsed !== null && parsed.protocol === "https:"
         && (X_MEDIA_HOSTS.has(parsed.hostname) || parsed.pathname === BSKY_BLOB_PATH
-            || parsed.hostname === POIPIKU_MEDIA_HOST);
+            || parsed.hostname === POIPIKU_MEDIA_HOST
+            || (parsed.hostname === PRIVATTER_MEDIA_HOST && parsed.pathname.startsWith(PRIVATTER_MEDIA_PATH))
+            || (parsed.hostname === PRIVATTER_PLUS_MEDIA_HOST && PRIVATTER_PLUS_MEDIA_PATH.test(parsed.pathname)));
 };
 
 /**
@@ -434,7 +446,7 @@ const record = (all, key, index, total) => {
 const ctxOf = (sender) => (sender?.tab?.incognito ? "i" : "n");
 
 /**
- * 同じ種類のウィンドウで開いている X / Bluesky / ポイピクのタブすべてへメッセージを送る。
+ * 同じ種類のウィンドウで開いている X / Bluesky / ポイピク / Privatter / Privatter+ のタブすべてへメッセージを送る。
  *
  * @param {"n"|"i"} ctx
  * @param {object} message

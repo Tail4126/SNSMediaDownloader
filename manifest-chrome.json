@@ -3,7 +3,7 @@
 
     "name": "__MSG_extName__",
     "short_name": "__MSG_extName__",
-    "version": "1.4.1",
+    "version": "1.5.0",
     "description": "__MSG_extDesc__",
 
     "default_locale": "en",
@@ -23,7 +23,9 @@
         "https://public.api.bsky.app/*",
         "https://plc.directory/*",
         "https://poipiku.com/*",
-        "https://cdn.poipiku.com/*"
+        "https://cdn.poipiku.com/*",
+        "https://privatter.net/*",
+        "https://privatter.me/*"
     ],
 
     "content_scripts": [
@@ -75,6 +77,35 @@
                 "shared/template.js",
                 "shared/core.js",
                 "sites/poipiku/content.js"
+            ],
+            "css": [
+                "content.css"
+            ],
+            "run_at": "document_end"
+        },
+        {
+            "matches": [
+                "https://privatter.net/i/*",
+                "https://privatter.net/p/*"
+            ],
+            "js": [
+                "shared/template.js",
+                "shared/core.js",
+                "sites/privatter/content.js"
+            ],
+            "css": [
+                "content.css"
+            ],
+            "run_at": "document_end"
+        },
+        {
+            "matches": [
+                "https://privatter.me/page/*"
+            ],
+            "js": [
+                "shared/template.js",
+                "shared/core.js",
+                "sites/privatterplus/content.js"
             ],
             "css": [
                 "content.css"
