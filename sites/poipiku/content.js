@@ -126,7 +126,28 @@
     const belongsTo = (path, cid) => cid !== null && shownSigned.get(path)?.cid === cid;
 
     /**
+     * 署名付き URL の有効期限（Expires。UNIX 時間の秒）。書かれていなければ、期限なしとして Infinity。
+     *
+     * @param {string} url
+     * @returns {number}
+     */
+    const expiresOf = (url) => {
+        const value = Number(URL.parse(url)?.searchParams.get("Expires") ?? NaN);
+        return Number.isFinite(value) ? value : Infinity;
+    };
+
+    /**
+     * 署名付き URL が、まだしばらく使えるか（期限まで 1 分以上あるか）。
+     * 保存の順番待ちの間に切れないよう、少し余裕を見ます。
+     *
+     * @param {string} url
+     * @returns {boolean}
+     */
+    const isFresh = (url) => expiresOf(url) * 1000 > Date.now() + 60 * 1000;
+
+    /**
      * ページ内に表示された署名付き画像を拾って覚える。
+     * 同じ画像が改めて表示されたとき（拡大表示を開き直したときなど）は、期限の先の URL に替えます。
      *
      * @returns {boolean} 新しく覚えたものがあれば true
      */
@@ -134,10 +155,15 @@
         let added = false;
         for (const img of document.querySelectorAll(SIGNED_IMG)) {
             const path = filePath(img.src);
-            if (path && !shownSigned.has(path)) {
-                shownSigned.set(path, { url: img.src, cid: ownerOf(path) });
-                added = true;
+            if (!path) continue;
+
+            const known = shownSigned.get(path);
+            if (known) {
+                if (expiresOf(img.src) > expiresOf(known.url)) known.url = img.src;
+                continue;
             }
+            shownSigned.set(path, { url: img.src, cid: ownerOf(path) });
+            added = true;
         }
         return added;
     };
@@ -195,20 +221,6 @@
     };
 
     /**
-     * 本文。改行は <br> で書かれているので、改行文字に戻してから文字だけを取り出します。
-     *
-     * @param {Element} root
-     * @returns {string}
-     */
-    const readText = (root) => {
-        const desc = root.querySelector(".IllustItemDesc");
-        if (!desc) return "";
-        const copy = desc.cloneNode(true);
-        for (const br of copy.querySelectorAll("br")) br.replaceWith("\n");
-        return copy.textContent ?? "";
-    };
-
-    /**
      * 投稿情報をすべて読む（アダプタの readPost）。保存するときだけ呼ばれます。
      *
      * @param {Element} root
@@ -224,7 +236,7 @@
             screenName: uid,
             postId: id,
             name: root.querySelector(".IllustItemUserName")?.textContent.trim() ?? "",
-            text: readText(root),
+            text: SMDCore.textOf(root.querySelector(".IllustItemDesc")), // 改行は <br> で書かれています
             time: null, // 投稿日時はページに無いので、{date} などは空になります
         };
     };
@@ -300,11 +312,25 @@
         if (shown.length === 0) return [];
 
         // ページ内で見えていた署名付き URL を優先し、足りないときだけ問い合わせます。
-        const urls = new Map([...shownSigned].map(([path, { url }]) => [path, url]));
+        // 署名付き URL には有効期限（Expires）があり、拡大表示を開いてから時間が経つと期限が切れて、
+        // 保存しようとしても 403 で失敗します。期限が切れている（間もなく切れる）ものは使わず、問い合わせ直します。
+        const urls = new Map();
+        for (const [path, { url }] of shownSigned) {
+            if (isFresh(url)) urls.set(path, url);
+        }
         if (shown.some(({ path }) => !urls.has(path))) {
             for (const [path, url] of await signedUrls(post.screenName, post.postId, passwordOf(root))) {
                 if (!urls.has(path)) urls.set(path, url);
+
+                // 覚えている URL も、期限の先の新しいものに替えておきます。
+                const known = shownSigned.get(path);
+                if (known && expiresOf(url) > expiresOf(known.url)) known.url = url;
             }
+        }
+
+        // 問い合わせても取れなかったものは、期限が切れているかもしれなくても、覚えている URL で試します。
+        for (const [path, { url }] of shownSigned) {
+            if (!urls.has(path)) urls.set(path, url);
         }
 
         const paths = shown.map(({ path }) => path);
@@ -312,21 +338,10 @@
             if (belongsTo(path, post.postId) && !paths.includes(path)) paths.push(path);
         }
 
+        // 拡張子と {media_id} は、原寸画像のファイル名（パスの最後の「/」より後ろ）から決めます。
         return paths.map((path) => {
             const url = urls.get(path);
-            if (!url) return null;
-
-            const name = path.slice(path.lastIndexOf("/") + 1);
-            const dot = name.lastIndexOf(".");
-            const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : "jpg";
-
-            return {
-                kind: "photo",
-                url,
-                ext: ext === "jpeg" ? "jpg" : ext,
-                id: dot > 0 ? name.slice(0, dot) : name,
-                res: "",
-            };
+            return url ? SMDCore.photoOf(url, path.slice(path.lastIndexOf("/") + 1)) : null;
         });
     };
 

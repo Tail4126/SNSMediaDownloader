@@ -34,6 +34,9 @@
     /** 原寸画像の URL。[1] がユーザー番号、[2] がファイル名（例: "8066673996975d547a798f.png"） */
     const IMAGE_URL = /^https:\/\/media\.privatter\.me\/img\/(\d+)\/original\/([\w.-]+)$/;
 
+    /** 投稿日時の表記（"2026-01-25 17:35:46"）。[1]〜[6] が年・月・日・時・分・秒 */
+    const DATE_TIME = /(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/;
+
     /**
      * URL から原寸画像の URL（クエリなどを除いたもの）を取り出す。投稿の画像でなければ null。
      * アイコン（…/icon/…）や広告の画像は当てはまりません。
@@ -72,29 +75,12 @@
     };
 
     /**
-     * 文字を取り出す。改行は <br> で書かれているので、改行文字に戻してから文字だけを取り出します。
-     *
-     * @param {Element|null|undefined} el
-     * @returns {string}
-     */
-    const textOf = (el) => {
-        if (!el) return "";
-        const copy = el.cloneNode(true);
-        for (const br of copy.querySelectorAll("br")) br.replaceWith("\n");
-        return copy.textContent?.trim() ?? "";
-    };
-
-    /**
      * 投稿日時。ページには "2026-01-25 17:35:46" の形で、日本時間で書かれています。
      *
      * @param {Element} root
      * @returns {string|null} ISO 8601（+09:00 付き）。見つからなければ null
      */
-    const readTime = (root) => {
-        const text = root.querySelector(".fa-clock")?.parentElement?.textContent ?? "";
-        const m = /(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/.exec(text);
-        return m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}+09:00` : null;
-    };
+    const readTime = (root) => SMDCore.jstTime(DATE_TIME.exec(root.querySelector(".fa-clock")?.parentElement?.textContent ?? ""));
 
     /**
      * 記事の情報をすべて読む（アダプタの readPost）。保存するときだけ呼ばれます。
@@ -102,6 +88,7 @@
      *   - ユーザー名（{user}）は投稿者へのリンク（/user/{ユーザー名}）から、表示名（{name}）はその文字から取ります
      *   - 本文（{text}）は記事のタイトルです（本文は長すぎてファイル名に向かないため）。
      *     タイトルが無ければ、タイトルの下の説明文を使います
+     *   - 改行は <br> で書かれているので、SMDCore.textOf で改行文字に戻してから読みます
      *
      * @param {Element} root
      * @returns {object|null}
@@ -113,32 +100,22 @@
 
         return {
             site: "privatterplus",
-            screenName: decodeURIComponent(user),
+            screenName: SMDCore.decode(user),
             postId: POST_ID,
-            name: textOf(link),
-            text: textOf(root.querySelector(":scope > h2")) || textOf(root.querySelector(":scope > .honbun")),
+            name: SMDCore.textOf(link),
+            text: SMDCore.textOf(root.querySelector(":scope > h2")) || SMDCore.textOf(root.querySelector(":scope > .honbun")),
             time: readTime(root),
         };
     };
 
     /**
      * メディア一覧（アダプタの getMedia）。並びは画面（DOM）と同じです。
+     * 拡張子と {media_id} はファイル名から決めます。
      *
      * @param {Element} root
      * @returns {Promise<object[]>}
      */
-    const getMedia = async (root) => images(root).map(({ url, file }) => {
-        const dot = file.lastIndexOf(".");
-        const ext = dot > 0 ? file.slice(dot + 1).toLowerCase() : "jpg";
-
-        return {
-            kind: "photo",
-            url,
-            ext: ext === "jpeg" ? "jpg" : ext,
-            id: dot > 0 ? file.slice(0, dot) : file,
-            res: "",
-        };
-    });
+    const getMedia = async (root) => images(root).map(({ url, file }) => SMDCore.photoOf(url, file));
 
     SMDCore.start({
         site: "privatterplus",

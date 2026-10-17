@@ -4,15 +4,16 @@
  * ==================================================================
  * バックグラウンドスクリプト。
  * Chrome では Service Worker、Firefox ではイベントページとして動きます。
- * manifest.json の background には service_worker と scripts の両方を書いてあり、どちらもこのファイルを
- * 指しています。Chrome は service_worker を、Firefox は scripts を使い、もう片方は無視します
- * （どちらも 121 以降の動きです）。ブラウザ専用の manifest-chrome.json と manifest-firefox.json には、
- * それぞれ自分が使うほうだけを書いてあります。
+ * manifest.json の background には service_worker と scripts の両方を書いてあります。
+ * Chrome は service_worker を、Firefox は scripts を使い、もう片方は無視します。
+ * ブラウザ専用の manifest-chrome.json と manifest-firefox.json には、それぞれ自分が使うほうだけを書いてあります。
  *
  * ページ上の content script にはできない仕事を、ここで引き受けます。
+ *   - 保存先のファイル名の組み立て（設定のテンプレートから。shared/template.js を使います）
  *   - chrome.downloads によるファイル保存（1 件ずつ順番に。失敗時の再試行と後片付けを含む）
  *   - ダウンロード数カウンター（全タブ合算）と保存済みの記録
  *   - Bluesky の API へのアクセス（CORS の制約を受けない）と結果のキャッシュ
+ *   - ニコニコ静画の原寸画像の URL の取得
  *
  * 【いつ止められても続きから動けるように】
  * バックグラウンドは、しばらく暇だとブラウザに止められます。
@@ -26,12 +27,21 @@
  * 状態を読み直し、続きから処理します。
  *
  * 【速さのための工夫】
- *   - storage の読み込みは起こされたときの 1 回だけ、書き込みも 1 回の変化につき 1 回にまとめる
+ *   - storage の読み込みは起こされたときの 1 回だけ。書き込みは、続けて起きた変化を少し待って 1 回にまとめ、
+ *     書き終わるのを待たずに次へ進む。ただし「保存を始める」ことだけは、ダウンロードを頼む前に書き出す
+ *     （それ以外の変化は、書き出す前に止められても、起こされたときの見回りで同じ状態に戻せます）
  *   - タブへの知らせは、カウンターと「保存できた 1 件」を 1 通のメッセージ（smdUpdate）にまとめる
- *   - 保存済みの記録は、投稿 1 件を 1 個の数値に詰めて持つ（コピーも転送も軽い）
+ *   - 保存済みの記録は、投稿 1 件を 1 個の数値に詰めて持つ（コピーも転送も軽い）。
+ *     タブを開いたときに渡すのは、そのタブのサイトの分だけ
  *   - Bluesky の API 応答は、使う項目だけに絞ってからキャッシュする（メモリも転送量も小さい）
  * ==================================================================
  */
+
+// ファイル名の組み立てに使う shared/template.js（globalThis.SMD）を読み込みます。
+// Firefox は manifest の scripts に並べた順に読み込むので、ここに来た時点で読み込み済みです。
+// Chrome の Service Worker は 1 ファイルしか指定できないので、ここで importScripts() を使って読み込みます
+// （importScripts は Service Worker の中にしかない関数で、Firefox のイベントページでは呼びません）。
+if (!globalThis.SMD) importScripts("shared/template.js");
 
 // ==================================================================
 // 定数
@@ -61,13 +71,35 @@ const PRIVATTER_PLUS_MEDIA_HOST = "media.privatter.me";
 const PRIVATTER_PLUS_MEDIA_PATH = /^\/img\/\d+\/original\//;
 
 /**
- * このブラウザの downloads API が受け付ける conflictAction の値。
- * Firefox は "prompt"（保存先を尋ねる）を実装しておらず、指定するとエラーになるため外します。
- * 拡張機能の URL が moz-extension: で始まるかどうかで Firefox を見分けます。
+ * Skeb の作品のメディアの URL の形。どちらも署名付きなので、ページに書かれた URL をそのまま保存します。
+ *   - 画像 … si.imgix.net の /{英数字}/uploads/origins/{ファイルの ID}（作品ページに表示される画像）
+ *   - 動画・音声 … fcdn.skeb.jp の /uploads/outputs/{ファイルの ID}
+ * 同じホストにある依頼の添付画像（/requests/…）や、アイコン・サイトの部品（/assets/…）は当てはまりません。
  */
-const CONFLICT_ACTIONS = chrome.runtime.getURL("").startsWith("moz-extension:")
-    ? new Set(["uniquify", "overwrite"])
-    : new Set(["uniquify", "overwrite", "prompt"]);
+const SKEB_IMAGE_HOST = "si.imgix.net";
+const SKEB_IMAGE_PATH = /^\/[0-9a-f]+\/uploads\/origins\/[\w-]+$/;
+const SKEB_FILE_HOST = "fcdn.skeb.jp";
+const SKEB_FILE_PATH = /^\/uploads\/outputs\/[\w-]+$/;
+
+/**
+ * ニコニコ静画のイラストの原寸画像の URL の形（lohas.nicoseiga.jp の /priv/{署名}/{期限}/{イラスト番号}）。
+ * 署名と期限が URL に入っているので、Cookie を送らなくても取得できます。
+ */
+const SEIGA_IMAGE_HOST = "lohas.nicoseiga.jp";
+const SEIGA_IMAGE_PATH = /^\/priv\/[0-9a-f]+\/\d+\/\d+$/;
+
+/**
+ * ニコニコ漫画のページの画像の URL の形（deliver.cdn.nicomanga.jp の /thumb/{署名付きの URL を符号化した文字列}.webp）。
+ * 同じホストの /thumb/mg_thumb/… や /material/… （作品のアイコンやバナー）は当てはまりません。
+ */
+const MANGA_IMAGE_HOST = "deliver.cdn.nicomanga.jp";
+const MANGA_IMAGE_PATH = /^\/thumb\/[\w-]+\.webp$/;
+
+/** ニコニコ静画のイラストの「原寸大で見る」のリンク先。ログインしていれば原寸画像のページへ転送されます */
+const SEIGA_SOURCE = "https://seiga.nicovideo.jp/image/source/";
+
+/** 原寸画像の MIME タイプから拡張子へ。ここに無いものは jpg とします */
+const SEIGA_EXT = { "image/png": "png", "image/gif": "gif", "image/webp": "webp", "image/jpeg": "jpg" };
 
 /** 失敗したときの再試行の待ち時間（ミリ秒）。要素の数が再試行の回数です（初回は含まない） */
 const RETRY_WAIT = [300, 800, 1500];
@@ -79,6 +111,14 @@ const RETRY_WAIT = [300, 800, 1500];
 const STALL_LIMIT = 3 * 60 * 1000;
 
 /**
+ * downloads.download() の返事を待っている途中でバックグラウンドが止められたとき、
+ * 「始まらなかった」と判断するまでの猶予（ミリ秒）。それまでは、始まったダウンロードが無いか探し続けます。
+ * 保存ダイアログを出すときは、利用者が保存先を選ぶまで始まらないので長めにします。
+ */
+const START_GRACE = 60 * 1000;
+const SAVE_AS_GRACE = 10 * 60 * 1000;
+
+/**
  * 何度やり直しても結果が変わらない中断理由。これらは再試行しません。
  * START_FAILED は、downloads.download() がその場で拒否した場合（ファイル名が不正など）に
  * この拡張機能が付ける名前です。
@@ -86,13 +126,26 @@ const STALL_LIMIT = 3 * 60 * 1000;
 const FATAL = new Set([
     "USER_CANCELED", "USER_SHUTDOWN", "START_FAILED",
     "SERVER_BAD_CONTENT", "SERVER_UNAUTHORIZED", "SERVER_FORBIDDEN",
+    "SERVER_CERT_PROBLEM", "SERVER_CROSS_ORIGIN_REDIRECT", "NETWORK_INVALID_REQUEST",
     "FILE_ACCESS_DENIED", "FILE_NO_SPACE", "FILE_NAME_TOO_LONG", "FILE_TOO_LARGE",
-    "FILE_BLOCKED", "FILE_SECURITY_CHECK_FAILED", "FILE_VIRUS_INFECTED",
+    "FILE_BLOCKED", "FILE_SECURITY_CHECK_FAILED", "FILE_VIRUS_INFECTED", "FILE_SAME_AS_SOURCE",
 ]);
 
-/** 状態の変化を知らせる先のタブ。manifest.json の content_scripts と同じ範囲です */
-const TAB_URLS = ["https://x.com/*", "https://twitter.com/*", "https://bsky.app/*", "https://poipiku.com/*",
-    "https://privatter.net/*", "https://privatter.me/*"];
+/** 1 回の依頼（ボタン 1 回分）で受け付けるファイル数の上限と、URL の長さの上限 */
+const MAX_ITEMS = 500;
+const MAX_URL_LENGTH = 8192;
+
+/**
+ * content script から届いた文字列のうち、ファイル名の組み立てに使う長さの上限。
+ * ファイル名の 1 階層は 150 バイトまでで、値は先頭から使うので、これより後ろが使われることはありません。
+ */
+const MAX_TEXT_LENGTH = 10000;
+
+/**
+ * 状態の変化を知らせる先のタブ。manifest の content_scripts に書いた範囲をそのまま使います
+ * （ここに書き写すと、サイトを足したときに直し忘れるため）。同じ範囲が 2 回出てくる X は 1 つにまとめます。
+ */
+const TAB_URLS = [...new Set(chrome.runtime.getManifest().content_scripts.flatMap((script) => script.matches))];
 
 /** 待ちが 0 になってから、カウンターを表示し続ける時間（ミリ秒） */
 const LINGER = 5000;
@@ -119,6 +172,12 @@ const HISTORY_KEY = { n: "history", i: "historyIncognito" };
 
 /** 保存待ちの列・保存中の 1 件・カウンターをまとめた「状態」の保存先キー（storage.session） */
 const STATE_KEY = "queue";
+
+/**
+ * 状態が変わってから storage.session へ書き出すまでの待ち時間（ミリ秒）。
+ * この間に続けて起きた変化（受け付け → 保存の開始、完了 → 次の保存の開始など）は、1 回の書き込みにまとめます。
+ */
+const WRITE_DELAY = 200;
 
 /** 保存中のダウンロードを見回るアラームの名前 */
 const WATCH_ALARM = "smd-watch";
@@ -179,55 +238,78 @@ const json = async (url) => {
 };
 
 /**
- * did:web 形式の DID から、DID ドキュメントの URL を作る。
- *   did:web:example.com          → https://example.com/.well-known/did.json
- *   did:web:example.com:user:bob → https://example.com/user/bob/did.json
- * 壊れた % を含む DID では decodeURIComponent が例外を投げますが、
- * 呼び出し元の once() がそれを受け止め、既定の PDS を使う流れになります。
- *
- * @param {string} did
- * @returns {string}
+ * content script から届く AT Protocol の識別子として受け付ける形。URL に組み込む前に、形を確かめます
+ * （ページの DOM から読んだ値なので、"did:web:example.com%2F..." のような、別の URL を作る値も届き得るため）。
+ *   did:plc … did:plc: に続く英小文字と数字（今の形式は 24 文字の base32）
+ *   did:web … did:web: に続くホスト名。AT Protocol はホスト名だけの did:web にしか対応していません
+ *             （パス付きやポート付き、IP アドレスは使われないので受け付けません）
+ *   ハンドル … ドメイン名の形（example.bsky.social）
+ *   rkey    … 投稿 ID（レコードキー）
  */
-const didWebUrl = (did) => {
-    const [host, ...path] = did.slice("did:web:".length).split(":").map(decodeURIComponent);
-    return `https://${host}/${path.length > 0 ? path.join("/") : ".well-known"}/did.json`;
-};
+const PLC_DID = /^did:plc:[a-z0-9]{1,64}$/;
+const WEB_DID = /^did:web:((?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)$/;
+const HANDLE = /^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
+const RKEY = /^[a-zA-Z0-9._:~-]{1,512}$/;
+
+/**
+ * 受け付ける形の DID か。
+ *
+ * @param {unknown} did
+ * @returns {did is string}
+ */
+const isDid = (did) => typeof did === "string" && (PLC_DID.test(did) || WEB_DID.test(did));
 
 /**
  * DID から、その人の PDS の URL を調べる。
+ *   did:plc:…           → https://plc.directory/{DID}
+ *   did:web:example.com → https://example.com/.well-known/did.json
  *
- * @param {string} did
+ * did:web の DID ドキュメントは投稿者自身のドメインにあり、host_permissions の外です。権限の外でも
+ * リクエスト自体は送れてしまう（応答が CORS で読めないだけで、相手のサーバーには届く）ので、
+ * そのドメインへの権限があるときだけ問い合わせます。無ければ問い合わせず、既定の PDS を使います
+ * （PRIVACY.md・README に書いているとおり、既定の権限では did:web は解決しません）。
+ *
+ * @param {string} did - isDid() で確かめた DID
  * @returns {Promise<string|null>} https の URL。調べられなければ null
  */
 const pdsOf = (did) => once(`pds:${did}`, async () => {
-    const doc = await json(did.startsWith("did:web:")
-        ? didWebUrl(did)
+    const web = WEB_DID.exec(did);
+    if (web && !(await chrome.permissions.contains({ origins: [`https://${web[1]}/*`] }).catch(() => false))) return null;
+
+    const doc = await json(web
+        ? `https://${web[1]}/.well-known/did.json`
         : `https://plc.directory/${encodeURIComponent(did)}`);
 
     // DID ドキュメントの service 一覧から、PDS を表す項目を探します。
-    const service = (doc.service ?? []).find(
-        (s) => s.type === "AtprotoPersonalDataServer" || String(s.id ?? "").endsWith("#atproto_pds"));
-    const endpoint = String(service?.serviceEndpoint ?? "").replace(/\/+$/, "");
+    const services = Array.isArray(doc?.service) ? doc.service : [];
+    const service = services.find(
+        (s) => s?.type === "AtprotoPersonalDataServer" || String(s?.id ?? "").endsWith("#atproto_pds"));
 
-    return endpoint.startsWith("https://") ? endpoint : null;
+    // https の URL で、ユーザー名・クエリ・フラグメントを含まないものだけを使います
+    // （content script はこの後ろに /xrpc/… を足して、ダウンロード元の URL を作るため）。
+    const endpoint = URL.parse(String(service?.serviceEndpoint ?? ""));
+    if (!endpoint || endpoint.protocol !== "https:" || endpoint.username || endpoint.password
+        || endpoint.search || endpoint.hash) return null;
+    return `${endpoint.origin}${endpoint.pathname.replace(/\/+$/, "")}`;
 });
 
 /**
  * ハンドル（example.bsky.social）を DID へ変換する。すでに DID ならそのまま返す。
  *
  * @param {string} actor - ハンドルまたは DID
- * @returns {Promise<string|null>}
+ * @returns {Promise<string|null>} 受け付ける形の DID。調べられなければ null
  */
 const didOf = async (actor) => {
-    if (actor.startsWith("did:")) return actor;
+    if (actor.startsWith("did:")) return isDid(actor) ? actor : null;
+    if (!HANDLE.test(actor)) return null;
 
-    const data = await once(`did:${actor}`, () =>
+    const data = await once(`did:${actor.toLowerCase()}`, () =>
         json(`${APPVIEW}/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(actor)}`));
-    return data?.did ?? null;
+    return isDid(data?.did) ? data.did : null;
 };
 
 /**
- * blob 参照から CID を取り出す（新しい形式は ref.$link、古い投稿の形式は cid）。
+ * blob 参照から CID を取り出す（新しい形式は ref.$link、初期の投稿に残っている形式は cid）。
  *
  * @param {object} blob
  * @returns {string}
@@ -263,7 +345,7 @@ const summarize = (post) => {
         media: (Array.isArray(blobs) ? blobs : []).filter((b) => cidOf(b?.image)).map((b) => ({
             kind: b.video ? "video" : "photo",
             cid: cidOf(b.image),
-            ext: BSKY_EXT[b.image.mimeType] ?? (b.video ? "mp4" : "jpg"),
+            ext: Object.hasOwn(BSKY_EXT, b.image.mimeType) ? BSKY_EXT[b.image.mimeType] : b.video ? "mp4" : "jpg",
             res: b.aspectRatio?.width ? `${b.aspectRatio.width}x${b.aspectRatio.height}` : "",
         })),
     };
@@ -294,6 +376,7 @@ const postOf = (did, rkey) => once(`post:${did}/${rkey}`, async () => {
  * X のメディア配信ホストだけに絞ります。Bluesky は投稿者の PDS（任意の https ホスト）から
  * 取得するので、ホストではなく getBlob のパスで判断します。ポイピクは画像の配信ホストだけに絞ります。
  * Privatter と Privatter+ は、配信ホストに原寸画像以外のファイル（アイコンなど）もあるので、原寸画像のパスでも絞ります。
+ * Skeb・ニコニコ静画・ニコニコ漫画も同じく、作品の画像のパスで絞ります。
  * URL.parse は、解析できなければ例外ではなく null を返すので、1 回の解析で済みます。
  *
  * @param {unknown} url
@@ -305,26 +388,39 @@ const isMediaUrl = (url) => {
         && (X_MEDIA_HOSTS.has(parsed.hostname) || parsed.pathname === BSKY_BLOB_PATH
             || parsed.hostname === POIPIKU_MEDIA_HOST
             || (parsed.hostname === PRIVATTER_MEDIA_HOST && parsed.pathname.startsWith(PRIVATTER_MEDIA_PATH))
-            || (parsed.hostname === PRIVATTER_PLUS_MEDIA_HOST && PRIVATTER_PLUS_MEDIA_PATH.test(parsed.pathname)));
+            || (parsed.hostname === PRIVATTER_PLUS_MEDIA_HOST && PRIVATTER_PLUS_MEDIA_PATH.test(parsed.pathname))
+            || (parsed.hostname === SKEB_IMAGE_HOST && SKEB_IMAGE_PATH.test(parsed.pathname))
+            || (parsed.hostname === SKEB_FILE_HOST && SKEB_FILE_PATH.test(parsed.pathname))
+            || (parsed.hostname === SEIGA_IMAGE_HOST && SEIGA_IMAGE_PATH.test(parsed.pathname))
+            || (parsed.hostname === MANGA_IMAGE_HOST && MANGA_IMAGE_PATH.test(parsed.pathname)));
 };
 
 /**
- * downloads API に渡してよい保存先の相対パスか確かめる。
+ * content script から届いた値を、ファイル名の組み立てに使ってよい形にする。
+ * 文字列ならそのまま（長すぎれば先頭だけ）使い、それ以外は「無い」ものとして undefined にします。
+ * 文字列の中身（使えない文字など）は、SMD.buildPath がファイル名にするときに整えます。
  *
- * content script 側（SMD.buildPath）で整形済みのはずですが、受け取った値は信用しない方針なので、
- * ここでも最後の確認をします。整形の不具合があっても、ダウンロードフォルダの外や
- * 不正な名前で保存しようとすることはありません。
- *   - 空・長すぎる値
- *   - 使えない文字（\ : * ? " < > | と制御文字）。「C:」のようなドライブ指定もこれで弾けます
- *   - 空の階層（先頭の / による絶対パスや、a//b）と「.」「..」の階層
- *
- * @param {unknown} name
- * @returns {boolean}
+ * @param {unknown} value
+ * @returns {string|undefined}
  */
-const isSafeFilename = (name) =>
-    typeof name === "string" && name.length > 0 && name.length <= 1000
-    && !/[\\:*?"<>|\u0000-\u001f\u007f]/.test(name)
-    && name.split("/").every((part) => part !== "" && part !== "." && part !== "..");
+const stringOf = (value) => (typeof value === "string" ? value.slice(0, MAX_TEXT_LENGTH) : undefined);
+
+/**
+ * content script から届いた投稿情報（core.js の PostInfo）を、使う項目だけの新しいオブジェクトにする。
+ *
+ * @param {unknown} post
+ * @returns {{site?: string, screenName?: string, postId?: string, recordId?: string, name?: string,
+ *            text?: string, time: string|null}}
+ */
+const postInfo = (post) => ({
+    site: stringOf(post?.site),
+    screenName: stringOf(post?.screenName),
+    postId: stringOf(post?.postId),
+    recordId: stringOf(post?.recordId),
+    name: stringOf(post?.name),
+    text: stringOf(post?.text),
+    time: stringOf(post?.time) ?? null,
+});
 
 // ==================================================================
 // 状態（保存待ちの列・保存中の 1 件・カウンター）と保存済みの記録
@@ -375,6 +471,7 @@ const blankState = () => ({
 /**
  * 状態と保存済みの記録。起こされた直後の 1 回だけ storage.session からまとめて読み、
  * 以降は同じオブジェクトを使い回します（止められて起こし直されたときは、ここで前回の続きを読み戻します）。
+ * storage.session は拡張機能を更新・再読み込みすると空になるので、読み戻すのは必ずこのファイルが書いたものです。
  *
  * 保存済みの記録は { "x:1234567890": 値 } の形で、値は「総数 × 2^32 + 保存済みの番号のビット」です。
  * ビットは「n 番目（0 始まり）を保存済みなら、下から n ビット目が 1」という数です。
@@ -383,31 +480,62 @@ const blankState = () => ({
  */
 let ready = null;
 
+/**
+ * 読み終えた状態と保存済みの記録（ready が解決したときの値と同じもの）。
+ * 書き出しを await せずに行うために、Promise を通さず直接使えるようにしておきます。
+ * @type {Awaited<NonNullable<typeof ready>>|null}
+ */
+let loaded = null;
+
 /** @returns {NonNullable<typeof ready>} */
 const load = () => {
     ready ??= chrome.storage.session.get([STATE_KEY, HISTORY_KEY.n, HISTORY_KEY.i])
         .catch(() => ({}))
-        .then((stored) => ({
-            state: stored[STATE_KEY] ?? blankState(),
-            history: { n: stored[HISTORY_KEY.n] ?? {}, i: stored[HISTORY_KEY.i] ?? {} },
-        }));
+        .then((stored) => {
+            loaded = {
+                state: stored[STATE_KEY] ?? blankState(),
+                history: { n: stored[HISTORY_KEY.n] ?? {}, i: stored[HISTORY_KEY.i] ?? {} },
+            };
+            return loaded;
+        });
     return ready;
 };
 
+/** 書き出しを予約したタイマーの ID（0 なら予約なし） */
+let writeTimer = 0;
+
+/** 次の書き出しで、状態と一緒に書き出す保存済みの記録（"n" / "i"） */
+const historyToWrite = new Set();
+
 /**
- * 状態（と、変わったときは保存済みの記録）を storage.session へ 1 回で書き出す。
- * 状態を変えたら必ず呼びます（呼んだ時点の内容が書き込まれるので、何度呼んでも最後の内容が残ります）。
+ * 状態（と、変わったときは保存済みの記録）を storage.session へ書き出す予約をする。
+ * 状態を変えたら必ず呼びます（load() で読んだものを変えたときだけなので、読み終えた後です）。
+ * WRITE_DELAY の間に何度呼ばれても書き込みは 1 回で、書くのはその時点の（いちばん新しい）内容です。
  *
  * @param {"n"|"i"} [historyCtx] - 保存済みの記録も書き出すなら、どちらの記録か
- * @returns {Promise<void>}
+ * @returns {void}
  */
-const persist = async (historyCtx) => {
-    const { state, history } = await load();
+const persist = (historyCtx) => {
+    if (historyCtx) historyToWrite.add(historyCtx);
+    writeTimer ||= setTimeout(write, WRITE_DELAY);
+};
 
-    const data = { [STATE_KEY]: state };
-    if (historyCtx) data[HISTORY_KEY[historyCtx]] = history[historyCtx];
+/**
+ * 予約を待たずに、今の状態を書き出す（予約されていた記録の書き出しも一緒に行い、予約は取り消します）。
+ * 書き終わるのは待ちませんが、拡張機能の API への依頼は呼んだ順に届くので、
+ * この後に頼んだ処理（downloads.download() など）より先に書き込まれます。
+ *
+ * @returns {void}
+ */
+const write = () => {
+    clearTimeout(writeTimer);
+    writeTimer = 0;
 
-    await chrome.storage.session.set(data).catch(() => {});
+    const data = { [STATE_KEY]: loaded.state };
+    for (const ctx of historyToWrite) data[HISTORY_KEY[ctx]] = loaded.history[ctx];
+    historyToWrite.clear();
+
+    chrome.storage.session.set(data).catch(() => {});
 };
 
 /**
@@ -446,31 +574,22 @@ const record = (all, key, index, total) => {
 const ctxOf = (sender) => (sender?.tab?.incognito ? "i" : "n");
 
 /**
- * 同じ種類のウィンドウで開いている X / Bluesky / ポイピク / Privatter / Privatter+ のタブすべてへメッセージを送る。
+ * カウンター（と、あれば保存できた 1 件）を、同じ種類のウィンドウで開いている対応サイトのタブすべてへ、
+ * 1 通のメッセージで知らせる。
  *
+ * @param {ReturnType<typeof blankState>} state
  * @param {"n"|"i"} ctx
- * @param {object} message
+ * @param {{key: string, index: number, total: number}} [saved] - 保存できた 1 件
  * @returns {Promise<void>}
  */
-const broadcast = async (ctx, message) => {
+const notify = async (state, ctx, saved) => {
+    const message = { type: "smdUpdate", counts: state.counts[ctx], saved };
     const tabs = await chrome.tabs.query({ url: TAB_URLS }).catch(() => []);
 
     for (const tab of tabs) {
         if (typeof tab.id !== "number" || (tab.incognito ? "i" : "n") !== ctx) continue;
         chrome.tabs.sendMessage(tab.id, message).catch(() => {}); // content script の無いタブは無視
     }
-};
-
-/**
- * カウンター（と、あれば保存できた 1 件）を、1 通のメッセージで各タブへ知らせる。
- *
- * @param {ReturnType<typeof blankState>} state
- * @param {"n"|"i"} ctx
- * @param {{key: string, index: number, total: number}} [saved] - 保存できた 1 件
- * @returns {void}
- */
-const notify = (state, ctx, saved) => {
-    broadcast(ctx, { type: "smdUpdate", counts: state.counts[ctx], saved });
 };
 
 /**
@@ -546,7 +665,7 @@ const pump = async () => {
     const next = state.jobs[0];
     if (!next) {
         // 何も残っていなければ見回りも止めます。
-        await chrome.alarms.clear(WATCH_ALARM).catch(() => {});
+        chrome.alarms.clear(WATCH_ALARM).catch(() => {});
         return;
     }
 
@@ -564,23 +683,32 @@ const pump = async () => {
     state.active = job;
     starting = true;
 
-    await persist();
+    // 「この 1 件を保存し始めた」ことは、ダウンロードを頼む前に書き出します（予約を待たずに）。
+    // 書き出す前に止められると、起こし直されたときに同じファイルをもう一度保存してしまうためです。
+    write();
 
     // 30 秒ごとの見回りを始めます（同じ名前で作り直すと、前のアラームは置き換わります）。
+    // Chrome は Promise を返し、Firefox は何も返しませんが、この指定で失敗することはないので、結果は待ちません。
     chrome.alarms.create(WATCH_ALARM, { periodInMinutes: 0.5 });
 
     try {
         const { url, filename, conflictAction, saveAs } = job;
-        job.downloadId = await chrome.downloads.download({ url, filename, conflictAction, saveAs });
+        const options = { url, filename, conflictAction, saveAs };
+
+        // Firefox では、拡張機能が始めたダウンロードは、指定しないと通常のダウンロード履歴に残ります。
+        // プライベートウィンドウで押されたものは、プライベートのダウンロードとして始めます
+        // （Chrome にはこの指定が無く、渡すとエラーになるので Firefox だけです）。
+        if (SMD.IS_FIREFOX && job.ctx === "i") options.incognito = true;
+
+        job.downloadId = await chrome.downloads.download(options);
     } catch (error) {
         // その場で拒否された場合です。保存ダイアログのキャンセルと、それ以外（ファイル名が不正など）を分けます。
         starting = false;
-        await finish(job, /cancel/i.test(String(error?.message)) ? "USER_CANCELED" : "START_FAILED");
+        finish(job, /cancel/i.test(String(error?.message)) ? "USER_CANCELED" : "START_FAILED");
         return;
     }
     starting = false;
-
-    await persist();
+    persist();
 
     // ごく小さいファイルは、ここに来た時点で終わっていることがあるので、すぐに一度確かめます。
     watch();
@@ -610,9 +738,9 @@ const finish = async (job, error) => {
 
     if (retry) {
         // やり直し: 少し待ってから、列の先頭で同じ仕事をもう一度行います。
-        const { downloadId, received, since, ...again } = job;
-        state.jobs.unshift({ ...again, attempt: job.attempt + 1, notBefore: Date.now() + RETRY_WAIT[job.attempt] });
-        await persist();
+        // 保存中の 1 件だけが使う項目（downloadId など）は、次に始めるときに pump() が付け直します。
+        state.jobs.unshift({ ...job, attempt: job.attempt + 1, notBefore: Date.now() + RETRY_WAIT[job.attempt] });
+        persist();
         pump();
         return;
     }
@@ -632,8 +760,29 @@ const finish = async (job, error) => {
     report(state, job, outcome);
     notify(state, job.ctx, saved);
 
-    await persist(saved ? job.ctx : undefined);
+    persist(saved ? job.ctx : undefined);
     pump();
+};
+
+/**
+ * 開始の途中で止められた仕事の、始まっていたダウンロードを探す。
+ * 同じ URL で、その仕事を始めた時刻より後に始まったもののうち、いちばん新しいものです。
+ *
+ * @param {Job} job
+ * @returns {Promise<number|null>} ダウンロード ID。見つからなければ null
+ */
+const adopt = async (job) => {
+    const items = await chrome.downloads.search({
+        url: job.url,
+        startedAfter: new Date(job.since - 1000).toISOString(),
+    }).catch(() => []);
+
+    let best = null;
+    for (const item of items) {
+        if (typeof item?.id !== "number") continue;
+        if (!best || Date.parse(item.startTime) > Date.parse(best.startTime)) best = item;
+    }
+    return best ? best.id : null;
 };
 
 /**
@@ -649,10 +798,20 @@ const watch = async () => {
 
     if (job.downloadId === null) {
         // 開始の返事を待っている最中（保存ダイアログが開いているなど）なら、そのまま待ちます。
+        if (starting) return;
+
         // 誰も待っていないのに ID が無いのは、開始の途中でバックグラウンドが止められた場合です。
-        // 始まったかどうか分からないので、やり直しの扱いにします。
-        if (!starting) await finish(job, "LOST");
-        return;
+        // ダウンロード自体は始まっていることがあるので（保存ダイアログで保存先を選んだ後など）、
+        // すぐにやり直すと同じファイルが二重に保存されたり、ダイアログが二重に出たりします。
+        // そこで、始まったダウンロードを探して引き継ぎ、猶予を過ぎても見つからなければやり直します。
+        const found = await adopt(job);
+        if (state.active !== job) return; // 探している間に、ほかの処理で片付いた
+        if (found === null) {
+            if (Date.now() - job.since > (job.saveAs ? SAVE_AS_GRACE : START_GRACE)) await finish(job, "LOST");
+            return;
+        }
+        job.downloadId = found;
+        persist();
     }
 
     const [item] = await chrome.downloads.search({ id: job.downloadId }).catch(() => []);
@@ -685,7 +844,15 @@ chrome.downloads.onChanged.addListener(async (delta) => {
 
     const { state } = await load();
     const job = state.active;
-    if (!job || job.downloadId !== delta.id) return;
+    if (!job) return;
+
+    // 開始の途中で止められた仕事（ID がまだ無い）のダウンロードかもしれないので、見回りで引き継ぎます。
+    // そうしないと、次の見回り（最大 30 秒後）まで、次の保存へ進めません。
+    if (job.downloadId === null) {
+        if (!starting) watch();
+        return;
+    }
+    if (job.downloadId !== delta.id) return;
 
     finish(job, now === "complete" ? "" : delta.error?.current ?? "INTERRUPTED");
 });
@@ -723,7 +890,7 @@ chrome.windows.onRemoved.addListener(async () => {
     }
     state.counts.i = freshCounts();
 
-    await persist("i");
+    persist("i");
 });
 
 // ==================================================================
@@ -733,54 +900,68 @@ chrome.windows.onRemoved.addListener(async () => {
 /** メッセージの種類ごとの処理 */
 const HANDLERS = {
     /**
-     * ファイルの保存を引き受ける。
+     * ファイルの保存を引き受ける。保存先のファイル名は、ここで設定のテンプレートから組み立てます。
      *
      * 保存が終わるのを待たずに、受け付けた件数だけをすぐに返します。
      * 返事を待たせたままにすると、Chrome は「1 つのイベントの処理が 5 分を超えた」として
      * バックグラウンドを止めてしまうことがあるためです。進み具合と結果は、
      * smdUpdate（カウンターと保存できた 1 件）と smdBatch（バッチの結果）で別に知らせます。
      *
-     * 検証で弾いた項目は、カウンターとバッチの結果の両方で「失敗」に数えます
-     * （どちらか一方だけに出ると、数が食い違って見えるため）。
+     * 受け取った値は信用せず、ここで必ず検証します。検証で弾いた項目は、カウンターとバッチの結果の
+     * 両方で「失敗」に数えます（どちらか一方だけに出ると、数が食い違って見えるため）。
      *
      * @param {object} message
      * @param {string} message.batch - バッチ ID
-     * @param {{url: string, filename: string, index: number}[]} message.items - 保存するファイル
-     * @param {string} message.post - 保存済みの記録のキー（"サイト:投稿ID"）
+     * @param {object} message.post - 投稿情報（core.js の PostInfo）
+     * @param {object[]} message.items - 保存するメディア（core.js の MediaItem に、投稿内の番号 index を足したもの）
      * @param {number} message.total - 投稿内のメディア総数
-     * @param {string} message.conflictAction - 同名ファイルがあるときの動作
-     * @param {boolean} message.saveAs - 保存ダイアログを表示するか
      * @param {chrome.runtime.MessageSender} sender
      * @returns {Promise<{accepted: number, rejected: number}|null>} バッチ ID が不正なら null
      */
-    download: async ({ batch, items, post, total, conflictAction, saveAs }, sender) => {
+    download: async ({ batch, post, items, total }, sender) => {
         if (typeof batch !== "string" || !BATCH_ID.test(batch)) return null;
 
         const ctx = ctxOf(sender);
         const list = Array.isArray(items) ? items : [];
+        const info = postInfo(post);
+        const count = Number.isSafeInteger(total) && total > 0 ? total : 0;
 
-        // 受け取った値は信用せず、ここで必ず検証します。
-        const key = typeof post === "string" && post.length <= 200 ? post : null;
-        const count = Number.isInteger(total) && total > 0 && total <= MAX_MEDIA ? total : 0;
-        const options = {
-            conflictAction: CONFLICT_ACTIONS.has(conflictAction) ? conflictAction : "uniquify",
-            saveAs: saveAs === true,
-        };
+        // 保存済みの記録のキー（"サイト:投稿ID"。recordId があればそちら）。
+        // メディアが MAX_MEDIA 件を超える投稿や、長すぎるキー（200 文字超）は記録しません（保存はします）。
+        const id = info.recordId ?? info.postId;
+        const key = info.site && id && info.site.length + id.length < 200 && count <= MAX_MEDIA
+            ? `${info.site}:${id}` : null;
 
+        const settings = await SMD.loadSettings();
+        const now = new Date(); // 同じ投稿のファイルで {dl_datetime} がずれないよう、1 回だけ取ります
+
+        // 1 回の依頼で受け付ける数には上限を設けます（超えた分は「失敗」に数えます）。
+        // ページ側のスクリプトに偽のメディア一覧を差し込まれても、際限なく保存が始まらないようにするためです。
         const jobs = [];
-        for (const item of list) {
-            if (!isMediaUrl(item?.url) || !isSafeFilename(item.filename)) continue;
+        for (const item of list.slice(0, MAX_ITEMS)) {
+            // 番号が総数の範囲に無いもの、保存してよい URL でないものは受け付けません。
+            if (!Number.isInteger(item?.index) || item.index < 0 || item.index >= count) continue;
+            if (typeof item.url !== "string" || item.url.length > MAX_URL_LENGTH || !isMediaUrl(item.url)) continue;
 
-            // 番号がおかしいものは、保存はしても記録には残しません。
-            const known = key !== null && Number.isInteger(item.index) && item.index >= 0 && item.index < count;
+            // ファイル名に使うメディアの情報。{n} は 1 始まりなので、番号に 1 を足します。
+            const media = {
+                url: item.url,
+                kind: stringOf(item.kind),
+                ext: stringOf(item.ext),
+                id: stringOf(item.id),
+                res: stringOf(item.res),
+                index: item.index + 1,
+                total: count,
+            };
             jobs.push({
                 batch, ctx,
                 url: item.url,
-                filename: item.filename,
-                key: known ? key : null,
-                index: known ? item.index : 0,
+                filename: SMD.buildPath(settings, { post: info, item: media, now }),
+                key,
+                index: item.index,
                 total: count,
-                ...options,
+                conflictAction: settings.conflictAction,
+                saveAs: settings.alwaysSaveAs,
                 attempt: 0,
             });
         }
@@ -796,23 +977,33 @@ const HANDLERS = {
             notify(state, ctx);
         }
 
-        await persist();
+        persist();
         pump();
 
         return { accepted: jobs.length, rejected };
     },
 
     /**
-     * タブを開いたときに、現在のカウンターと保存済みの記録を返す。
+     * タブを開いたときに、現在のカウンターと、そのタブのサイトの保存済みの記録を返す。
+     * 記録はほかのサイトの分も合わせて最大 3000 件あるので、使う分だけに絞って渡します。
      *
-     * @param {object} _message
+     * @param {{site?: unknown}} message - site は "x" などのサイト名
      * @param {chrome.runtime.MessageSender} sender
      * @returns {Promise<{counts: object, history: Record<string, number>}>}
      */
-    smdState: async (_message, sender) => {
+    smdState: async ({ site }, sender) => {
         const ctx = ctxOf(sender);
         const { state, history } = await load();
-        return { counts: state.counts[ctx], history: history[ctx] };
+
+        const own = {};
+        if (typeof site === "string" && site) {
+            const prefix = `${site}:`;
+            const all = history[ctx];
+            for (const key in all) {
+                if (key.startsWith(prefix)) own[key] = all[key];
+            }
+        }
+        return { counts: state.counts[ctx], history: own };
     },
 
     /**
@@ -826,10 +1017,56 @@ const HANDLERS = {
         if (!did) return { post: null, pds: PDS };
 
         const [post, pds] = await Promise.all([
-            typeof rkey === "string" && rkey ? postOf(did, rkey) : null,
+            typeof rkey === "string" && RKEY.test(rkey) ? postOf(did, rkey) : null,
             pdsOf(did),
         ]);
         return { post, pds: pds ?? PDS };
+    },
+
+    /**
+     * ニコニコ静画のイラストの、原寸画像の URL と拡張子を調べる。
+     *
+     * 原寸画像の URL には、その都度作られる署名が入っていて、イラストのページには書かれていません。
+     * ページの「原寸大で見る」のリンク（/image/source/{番号}）を開くと、ログインしていれば
+     * 原寸画像のページ（lohas.nicoseiga.jp/o/{署名}/{期限}/{番号}）へ転送され、その中の画像が
+     * lohas.nicoseiga.jp/priv/{同じ署名}/{同じ期限}/{番号} です。ここでは、利用者がリンクを開いたときと同じ
+     * リクエストを送り（ニコニコのログイン状態の Cookie はブラウザが付けます）、その画像の URL を拾います。
+     * content script から送らないのは、転送先が別のホストで、ページからは応答を読めない（CORS）ためです。
+     *
+     * 拡張子は URL からは分からないので、画像の種類だけを HEAD で尋ねます（画像の中身は受け取りません）。
+     *
+     * @param {{id?: unknown}} message - id はイラスト番号（im の後ろの数字）
+     * @returns {Promise<{url: string, ext: string}|null>} 調べられなければ null（ログインしていないときなど）
+     */
+    seigaSource: async ({ id }) => {
+        if (typeof id !== "string" || !/^\d{1,12}$/.test(id)) return null;
+
+        const res = await fetch(`${SEIGA_SOURCE}${id}`, {
+            credentials: "include",
+            signal: AbortSignal.timeout(15000),
+        });
+        if (!res.ok) return null;
+
+        // 1. ページの中の画像（/priv/…）。2. 無ければ、転送先の URL（/o/…）の /o/ を /priv/ に替えたもの。
+        const html = await res.text();
+        const inPage = new RegExp(`https://lohas\\.nicoseiga\\.jp/priv/[0-9a-f]+/\\d+/${id}(?=["'\\s<>])`).exec(html)?.[0];
+        const fromUrl = URL.parse(res.url);
+        const guessed = fromUrl?.hostname === SEIGA_IMAGE_HOST && fromUrl.pathname.startsWith("/o/")
+            ? `https://${SEIGA_IMAGE_HOST}/priv/${fromUrl.pathname.slice(3)}` : null;
+
+        const url = inPage ?? guessed;
+        if (!url || !isMediaUrl(url) || !url.endsWith(`/${id}`)) return null;
+
+        // 拡張子。尋ねられなかったときは jpg とします（中身が違っても、多くのアプリは開けます）。
+        let ext = "jpg";
+        try {
+            const head = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(10000) });
+            const type = head.headers.get("content-type")?.split(";")[0].trim().toLowerCase() ?? "";
+            if (Object.hasOwn(SEIGA_EXT, type)) ext = SEIGA_EXT[type];
+        } catch {
+            // そのまま jpg とします。
+        }
+        return { url, ext };
     },
 };
 

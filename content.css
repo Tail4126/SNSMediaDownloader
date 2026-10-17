@@ -3,7 +3,7 @@
 /*
  * content.css
  * ==================================================================
- * X・Bluesky・ポイピク・Privatter・Privatter+ のページに直接差し込まれるスタイル。
+ * X・Bluesky・ポイピク・Privatter・Privatter+・Skeb・ニコニコ静画・漫画のページに直接差し込まれるスタイル。
  * ダウンロードボタン・通知（トースト）・ダウンロード数カウンターの見た目を定義します。
  *
  * ここが popup.css と決定的に違うのは「他人の家に間借りしている」点です。
@@ -18,20 +18,16 @@
 
 :root
 {
-    /*
-     * 色を「rgb(...)」の形ではなく、数値 3 つのカンマ区切りで持たせています。
-     * 一見すると回りくどいですが、こうしておくと 1 つの変数から
-     *   rgb(var(--smd-accent))         → 不透明な色
-     *   rgba(var(--smd-accent), 0.1)   → 10% の半透明
-     * の両方を作れます。色ごとに変数を 2 つ用意する必要がなくなります。
-     */
-    --smd-accent: 29, 155, 240;  /* X のブランドカラー（既定値） */
+  /*
+   * 色は普通の rgb() で持ち、半透明にしたいところでは
+   *   color-mix(in srgb, var(--smd-accent) 10%, transparent)   → 10% の半透明
+   * のように、透明（transparent）と混ぜて作ります。1 つの変数から、不透明な色と半透明の色の両方を作れます。
+   */
+  --smd-accent: rgb(29, 155, 240); /* X のブランドカラー（既定値） */
+  --smd-idle: rgb(113, 118, 123);  /* 押していないときのアイコン色 */
 
-    /* こちらは半透明にして使わないので、そのまま rgb() で書いています */
-    --smd-idle: rgb(113, 118, 123); /* 押していないときのアイコン色 */
-
-    /* 保存済みの色（緑）。サイトを問わず同じにして「済み」を一目で分かるようにします */
-    --smd-done: 0, 186, 124;
+  /* 保存済みの色（緑）。サイトを問わず同じにして「済み」を一目で分かるようにします */
+  --smd-done: rgb(0, 186, 124);
 }
 
 /*
@@ -45,28 +41,42 @@
  */
 [data-smd-site = "bluesky"]
 {
-    --smd-accent: 16, 131, 254;
-    --smd-idle: rgb(111, 134, 159);
+  --smd-accent: rgb(16, 131, 254);
+  --smd-idle: rgb(111, 134, 159);
 }
 
 [data-smd-site = "poipiku"]
 {
-    --smd-accent: 52, 152, 219;
-    --smd-idle: rgb(128, 128, 128);
+  --smd-accent: rgb(52, 152, 219);
+  --smd-idle: rgb(128, 128, 128);
 }
 
 /* Privatter（既定のテーマの見出しやボタンに近い、落ち着いた青） */
 [data-smd-site = "privatter"]
 {
-    --smd-accent: 68, 110, 155;
-    --smd-idle: rgb(128, 128, 128);
+  --smd-accent: rgb(68, 110, 155);
+  --smd-idle: rgb(128, 128, 128);
 }
 
 /* Privatter+（ボタンやリンクに使われている青） */
 [data-smd-site = "privatterplus"]
 {
-    --smd-accent: 13, 110, 253;
-    --smd-idle: rgb(108, 117, 125);
+  --smd-accent: rgb(13, 110, 253);
+  --smd-idle: rgb(108, 117, 125);
+}
+
+/* Skeb（ロゴやボタンに使われている青緑） */
+[data-smd-site = "skeb"]
+{
+  --smd-accent: rgb(40, 131, 127);
+  --smd-idle: rgb(122, 122, 122);
+}
+
+/* ニコニコ静画・ニコニコ漫画（ニコニコのロゴやヘッダーの黒に近い色） */
+[data-smd-site = "niconico"]
+{
+  --smd-accent: rgb(37, 37, 37);
+  --smd-idle: rgb(128, 128, 128);
 }
 
 /* ------------------------------------------------------------------
@@ -74,44 +84,85 @@
  * ------------------------------------------------------------------ */
 .smd-button
 {
-    display: inline-flex;   /* アイコンと枚数バッジを横並びにする */
-    align-items: center;
-    gap: 3px;
-    margin-left: 4px;       /* 隣のボタンとの間隔 */
-    padding: 6px;           /* 押しやすいよう、見た目より広めの当たり判定を作る */
+  display: inline-flex;   /* アイコンと枚数バッジを横並びにする */
+  align-items: center;
+  gap: 3px;
+  margin-left: 4px;       /* 隣のボタンとの間隔 */
+  padding: 6px;           /* 押しやすいよう、見た目より広めの当たり判定を作る */
 
-    /*
-     * border: 0 と background: transparent は、
-     * ブラウザ標準のボタン装飾を消すための指定です。
-     * サイト側の CSS がボタンに枠線を付けている場合にも効きます。
-     */
-    border: 0;
-    border-radius: 9999px;
-    background: transparent;
+  /*
+   * border: 0 と background: transparent は、
+   * ブラウザ標準のボタン装飾を消すための指定です。
+   * サイト側の CSS がボタンに枠線を付けている場合にも効きます。
+   */
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
 
-    /*
-     * SVG アイコン側で fill="currentColor" と書いてあるため、
-     * ここで color を指定するだけでアイコンの色が変わります。
-     */
-    color: var(--smd-idle);
+  /*
+   * アイコンは下の ::before で currentColor（この color の値）で塗るので、
+   * ここで color を指定するだけでアイコンの色が変わります。
+   */
+  color: var(--smd-idle);
 
-    line-height: 1; /* 余分な行の高さを消して、アイコンを正確に中央へ置く */
-    cursor: pointer;
-    transition: background-color 0.15s, color 0.15s;
+  /* ボタンの中の文字は、メディアが複数あるときにアイコンの右へ出る枚数バッジだけです */
+  font-size: 12px;
+  font-weight: 700;
+
+  line-height: 1; /* 余分な行の高さを消して、アイコンを正確に中央へ置く */
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
 }
 
 .smd-button:hover
 {
-    /* X や Bluesky の他のボタンと同じ「丸く色が付く」挙動に合わせています */
-    color: rgb(var(--smd-accent));
-    background: rgba(var(--smd-accent), 0.1);
+  /* X や Bluesky の他のボタンと同じ「丸く色が付く」挙動に合わせています */
+  color: var(--smd-accent);
+  background: color-mix(in srgb, var(--smd-accent) 10%, transparent);
 }
 
-/* メディアが複数あるときにアイコンの右へ出る枚数バッジ */
-.smd-count
+/* ------------------------------------------------------------------
+ * アイコン（メインボタン・個別ボタン共通）
+ *
+ * 下向き矢印（保存）とチェックマーク（保存済み）を、ボタンの ::before に CSS だけで描きます。
+ * 18px 四方の箱を文字の色（currentColor）で塗り、clip-path: path() でアイコンの形に切り抜く仕組みです。
+ * path() の中身は SVG の path の d 属性と同じ書き方で、18px 四方の座標で書いてあります。
+ *
+ * SVG の要素をボタンごとに作る方法と見た目は同じですが、ボタンの中に要素が増えないので、
+ * ボタンを付けるのも描き直すのも軽く済み、ページの DOM も重くなりません。
+ * 画像の読み込み（url()）ではないので、サイトのセキュリティ設定（CSP）で表示が妨げられることもありません。
+ * ------------------------------------------------------------------ */
+.smd-button::before,
+.smd-item-button::before
 {
-    font-size: 12px;
-    font-weight: 700;
+  content: "";
+  flex: none;
+  width: 18px;
+  height: 18px;
+  background-color: currentColor;
+  clip-path: path("M9 2.25a.75.75 0 0 1 .75.75v6.4425l1.725-1.725a.75.75 0 1 1 1.05 1.065l-3 3a.75.75 0 0 1-1.05 0l-3-3a.75.75 0 1 1 1.05-1.065l1.725 1.725V3a.75.75 0 0 1 .75-.75zM3.75 13.5a.75.75 0 0 1 .75-.75h9a.75.75 0 1 1 0 1.5H4.5a.75.75 0 0 1-.75-.75z");
+}
+
+/* 保存済みのボタンは、矢印の代わりにチェックマークを描きます（core.js の look() が smd-done を付け外しします） */
+.smd-done::before
+{
+  clip-path: path("M7.125 9.0675 5.025 6.975a.75.75 0 0 0-1.05 1.05l2.625 2.625a.75.75 0 0 0 1.05 0l6.375-6.375a.75.75 0 0 0-1.05-1.05zM3.75 13.5a.75.75 0 0 1 .75-.75h9a.75.75 0 1 1 0 1.5H4.5a.75.75 0 0 1-.75-.75z");
+}
+
+/*
+ * Windows のハイコントラスト（強制カラーモード）では、ブラウザが色をシステムの決まった色に塗り替えます。
+ * 背景色で描いているアイコンは、そのままだと背景と同じ色に塗られて消えてしまうので、アイコンだけは
+ * 塗り替えの対象から外し（forced-color-adjust: none）、ボタンの文字の色（ButtonText）で描きます。
+ * ボタンの背景はブラウザが ButtonFace に塗り替えるので、どの配色でも読める組み合わせになります。
+ */
+@media (forced-colors: active)
+{
+  .smd-button::before,
+  .smd-item-button::before
+  {
+    forced-color-adjust: none;
+    background-color: ButtonText;
+  }
 }
 
 /* ------------------------------------------------------------------
@@ -119,38 +170,38 @@
  * ------------------------------------------------------------------ */
 .smd-item-button
 {
-    /*
-     * position: absolute は「一番近い、position が static でない祖先」を
-     * 基準に配置されます。その基準を確保するため、core.js の apply() が
-     * 必要に応じて親へ position: relative を付けています。
-     */
-    position: absolute;
-    top: 8px;
-    right: 8px;
+  /*
+   * position: absolute は「一番近い、position が static でない祖先」を
+   * 基準に配置されます。その基準を確保するため、core.js の apply() が
+   * 必要に応じて親へ position: relative を付けています。
+   */
+  position: absolute;
+  top: 8px;
+  right: 8px;
 
-    /* サムネイル画像より前面に出すための重なり順 */
-    z-index: 2;
+  /* サムネイル画像より前面に出すための重なり順 */
+  z-index: 2;
 
-    display: inline-flex;
-    align-items: center;
-    justify-content: center; /* 縦横ともに中央そろえ */
-    width: 30px;
-    height: 30px;
-    padding: 0;
-    border: 0;
-    border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center; /* 縦横ともに中央そろえ */
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
 
-    /*
-     * 写真の上に置くため、背景は黒の半透明にします。
-     * 明るい写真でも暗い写真でも白いアイコンが読めるようにするためです。
-     */
-    background: rgba(0, 0, 0, 0.6);
-    color: #fff;
-    cursor: pointer;
+  /*
+   * 写真の上に置くため、背景は黒の半透明にします。
+   * 明るい写真でも暗い写真でも白いアイコンが読めるようにするためです。
+   */
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  cursor: pointer;
 
-    /* 普段は隠しておき、マウスが乗ったときだけ現れます（下のルール参照） */
-    opacity: 0;
-    transition: opacity 0.15s, background-color 0.15s;
+  /* 普段は隠しておき、マウスが乗ったときだけ現れます（下のルール参照） */
+  opacity: 0;
+  transition: opacity 0.15s, background-color 0.15s;
 }
 
 /*
@@ -167,12 +218,12 @@
 *:hover > .smd-item-button,
 .smd-item-button:focus-visible
 {
-    opacity: 1;
+  opacity: 1;
 }
 
 .smd-item-button:hover
 {
-    background: rgba(var(--smd-accent), 0.9);
+  background: color-mix(in srgb, var(--smd-accent) 90%, transparent);
 }
 
 /*
@@ -185,14 +236,24 @@
  */
 [data-smd-site = "privatter"] a:has(> .smd-item-button)
 {
-    display: block;
-    width: fit-content;
-    max-width: 100%;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
 }
 
 [data-smd-site = "privatter"] a:has(> .smd-item-button):has(> img.center-block)
 {
-    margin-inline: auto;
+  margin-inline: auto;
+}
+
+/*
+ * X の画像の拡大表示は、背景がいつも黒で、操作バーのアイコンは白です。
+ * メインボタンも同じ白にして、隣のボタンに並べたときに沈んで見えないようにします。
+ * 右側の会話欄（<article> の中）は、ふだんのテーマの色のままなので対象にしません。
+ */
+[data-smd-site = "x"] [aria-modal = "true"] .smd-button:not(article .smd-button)
+{
+  --smd-idle: rgb(255, 255, 255);
 }
 
 /*
@@ -203,8 +264,8 @@
  */
 [data-smd-site = "privatterplus"] a:has(> .smd-item-button)
 {
-    display: inline-block;
-    max-width: 100%;
+  display: inline-block;
+  max-width: 100%;
 }
 
 /*
@@ -218,25 +279,47 @@
  */
 [data-smd-site = "privatterplus"] .smd-button
 {
-    margin-block: -6px;
-    align-self: center;
-    vertical-align: middle;
+  margin-block: -6px;
+  align-self: center;
+  vertical-align: middle;
+}
+
+/*
+ * Skeb のメインボタンは、作品のページの右上、「シェア:」の丸いボタンの並びの右横に置きます。
+ * 並びは横並び（flex）で、丸いボタンより少し大きいので、Privatter+ と同じく上下の余白の分だけ
+ * 行の高さに数えないようにし、縦の中央にそろえます。
+ */
+[data-smd-site = "skeb"] .smd-button
+{
+  margin-block: -6px;
+  align-self: center;
+  vertical-align: middle;
+}
+
+/*
+ * ニコニコ静画・漫画のメインボタンは、作品の上の欄の投稿日時の右横（li.date の中）に置きます。
+ * 日時の文字の並びに置くので、文字の縦の中央にそろえ、上下の余白は行の高さに数えないようにします。
+ */
+[data-smd-site = "niconico"] .smd-button
+{
+  margin-block: -6px;
+  vertical-align: middle;
 }
 
 /* ------------------------------------------------------------------
  * 保存済みの状態
  * core.js の look() が、保存済みの記録を見てこのクラスを付け外しします。
- * アイコンも矢印からチェックマークへ差し替わります。
+ * アイコンも矢印からチェックマークへ変わります（上の「アイコン」参照）。
  * ------------------------------------------------------------------ */
 .smd-button.smd-done,
 .smd-button.smd-done:hover
 {
-    color: rgb(var(--smd-done));
+  color: var(--smd-done);
 }
 
 .smd-button.smd-done:hover
 {
-    background: rgba(var(--smd-done), 0.1);
+  background: color-mix(in srgb, var(--smd-done) 10%, transparent);
 }
 
 /*
@@ -245,14 +328,14 @@
  */
 .smd-item-button.smd-done
 {
-    opacity: 1;
-    background: rgba(var(--smd-done), 0.85);
+  opacity: 1;
+  background: color-mix(in srgb, var(--smd-done) 85%, transparent);
 }
 
 /* 押せば何度でも保存し直せるので、ホバー時は通常のボタンと同じ色に戻します */
 .smd-item-button.smd-done:hover
 {
-    background: rgba(var(--smd-accent), 0.9);
+  background: color-mix(in srgb, var(--smd-accent) 90%, transparent);
 }
 
 /* ------------------------------------------------------------------
@@ -265,13 +348,14 @@
 .smd-button.smd-busy,
 .smd-item-button.smd-busy
 {
-    opacity: 0.45; /* 薄くして「作業中」と伝える */
+  opacity: 0.45; /* 薄くして「作業中」と伝える */
 
-    /*
-     * pointer-events: none にすると、クリックもホバーも一切受け付けなくなります。
-     * 保存中に連打されて同じファイルを何度もダウンロードするのを防ぎます。
-     */
-    pointer-events: none;
+  /*
+   * 保存中の連打は core.js がクリックを受け取ったうえで見送ります。
+   * pointer-events: none で押せなくすると、クリックがボタンの下にある画像のリンクや投稿へ素通りし、
+   * 拡大表示や投稿のページが開いてしまうため、ここではカーソルの形だけを変えます。
+   */
+  cursor: progress;
 }
 
 /* ------------------------------------------------------------------
@@ -280,64 +364,64 @@
  * ------------------------------------------------------------------ */
 .smd-toast
 {
-    /* fixed はスクロールしても画面上の同じ位置に留まります */
-    position: fixed;
-    left: 50%;
-    bottom: 24px;
+  /* fixed はスクロールしても画面上の同じ位置に留まります */
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
 
-    /*
-     * 32 ビット符号付き整数の最大値です。
-     * SNS のモーダルやヘッダーは大きな z-index を使うことが多いため、
-     * 「これ以上は存在しない」値を指定して確実に最前面へ出しています。
-     */
-    z-index: 2147483647;
+  /*
+   * 32 ビット符号付き整数の最大値です。
+   * SNS のモーダルやヘッダーは大きな z-index を使うことが多いため、
+   * 「これ以上は存在しない」値を指定して確実に最前面へ出しています。
+   */
+  z-index: 2147483647;
 
-    /* vw は画面幅に対する割合。80vw ＝ 画面幅の 80% が上限 */
-    max-width: 80vw;
+  /* vw は画面幅に対する割合。80vw ＝ 画面幅の 80% が上限 */
+  max-width: 80vw;
 
-    padding: 10px 18px;
-    border-radius: 9999px;
-    background: rgb(244, 33, 46); /* エラー用の赤。サイトを問わず同じ色 */
-    color: #fff;
+  padding: 10px 18px;
+  border-radius: 9999px;
+  background: rgb(244, 33, 46); /* エラー用の赤。サイトを問わず同じ色 */
+  color: #fff;
 
-    /*
-     * サイト側のフォント設定を引き継がず、自前で指定します。
-     * 継承すると SNS 側の変更で見た目が崩れる可能性があるためです。
-     */
-    font-family: system-ui, sans-serif;
-    font-size: 14px;
-    font-weight: 600;
+  /*
+   * サイト側のフォント設定を引き継がず、自前で指定します。
+   * 継承すると SNS 側の変更で見た目が崩れる可能性があるためです。
+   */
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
 
-    opacity: 0;
+  opacity: 0;
 
-    /*
-     * 非表示のときに背後のリンクなどをクリックできるようにします。
-     * これが無いと、消えた後も透明な帯が操作を邪魔してしまいます。
-     */
-    pointer-events: none;
+  /*
+   * 非表示のときに背後のリンクなどをクリックできるようにします。
+   * これが無いと、消えた後も透明な帯が操作を邪魔してしまいます。
+   */
+  pointer-events: none;
 
-    /*
-     * translateX(-50%) は横方向の中央そろえの定番です。
-     * left: 50% で「要素の左端」を画面中央に置き、
-     * そこから自分の幅の半分だけ左へ戻すことで、正確に中央へ来ます。
-     * translateY(12px) は初期状態で少し下にずらしておく分で、
-     * 表示時に 0 へ戻ることで「下からふわっと出る」動きになります。
-     */
-    transform: translateX(-50%) translateY(12px);
-    transition: opacity 0.2s, transform 0.2s;
+  /*
+   * translateX(-50%) は横方向の中央そろえの定番です。
+   * left: 50% で「要素の左端」を画面中央に置き、
+   * そこから自分の幅の半分だけ左へ戻すことで、正確に中央へ来ます。
+   * translateY(12px) は初期状態で少し下にずらしておく分で、
+   * 表示時に 0 へ戻ることで「下からふわっと出る」動きになります。
+   */
+  transform: translateX(-50%) translateY(12px);
+  transition: opacity 0.2s, transform 0.2s;
 }
 
 /* core.js がこのクラスを付け外しして表示・非表示を切り替えます */
 .smd-toast-show
 {
-    opacity: 1;
+  opacity: 1;
 
-    /*
-     * translateX(-50%) をここでも書き直しているのは、transform が
-     * 「上書き」されるプロパティだからです。translateY だけ書くと
-     * 中央そろえが解除され、トーストが右にずれてしまいます。
-     */
-    transform: translateX(-50%) translateY(0);
+  /*
+   * translateX(-50%) をここでも書き直しているのは、transform が
+   * 「上書き」されるプロパティだからです。translateY だけ書くと
+   * 中央そろえが解除され、トーストが右にずれてしまいます。
+   */
+  transform: translateX(-50%) translateY(0);
 }
 
 /* ------------------------------------------------------------------
@@ -346,48 +430,48 @@
  * ------------------------------------------------------------------ */
 .smd-counter
 {
-    position: fixed;
-    left: 16px;
+  position: fixed;
+  left: 16px;
 
-    /* iPhone などの画面下の丸みやホームバーに隠れないよう、安全領域の分を足します */
-    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  /* iPhone などの画面下の丸みやホームバーに隠れないよう、安全領域の分を足します */
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
 
-    z-index: 2147483647; /* トーストと同じく最前面へ */
+  z-index: 2147483647; /* トーストと同じく最前面へ */
 
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 14px;
-    border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-radius: 9999px;
 
-    /* サイトのライト / ダークどちらでも読めるよう、濃い半透明の背景に白文字にします */
-    background: rgba(15, 20, 25, 0.88);
-    color: #fff;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  /* サイトのライト / ダークどちらでも読めるよう、濃い半透明の背景に白文字にします */
+  background: rgba(15, 20, 25, 0.88);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 
-    font-family: system-ui, sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    line-height: 1;
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
 
-    /* 数字の幅をそろえ、件数が変わっても横にがたつかないようにします */
-    font-variant-numeric: tabular-nums;
+  /* 数字の幅をそろえ、件数が変わっても横にがたつかないようにします */
+  font-variant-numeric: tabular-nums;
 
-    /*
-     * 左下は X・Bluesky ともにアカウント切り替えなどのボタンがある場所です。
-     * クリックを素通りさせ、下にあるボタンを普段どおり押せるようにします。
-     */
-    pointer-events: none;
+  /*
+   * 左下は X・Bluesky ともにアカウント切り替えなどのボタンがある場所です。
+   * クリックを素通りさせ、下にあるボタンを普段どおり押せるようにします。
+   */
+  pointer-events: none;
 
-    opacity: 0;
-    transform: translateY(12px);
-    transition: opacity 0.2s, transform 0.2s;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.2s, transform 0.2s;
 }
 
 .smd-counter-show
 {
-    opacity: 1;
-    transform: translateY(0);
+  opacity: 1;
+  transform: translateY(0);
 }
 
 /*
@@ -403,40 +487,40 @@
  */
 @starting-style
 {
-    .smd-counter-show
-    {
-        opacity: 0;
-        transform: translateY(12px);
-    }
+  .smd-counter-show
+  {
+    opacity: 0;
+    transform: translateY(12px);
+  }
 }
 
 .smd-counter-item
 {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 5px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
 }
 
 /* display を指定したため、hidden 属性だけでは消えなくなるので明示します */
 .smd-counter-item[hidden]
 {
-    display: none;
+  display: none;
 }
 
 .smd-counter-label
 {
-    font-weight: 500;
-    opacity: 0.75;
+  font-weight: 500;
+  opacity: 0.75;
 }
 
 .smd-counter-done .smd-counter-num
 {
-    color: rgb(var(--smd-done));
+  color: var(--smd-done);
 }
 
 .smd-counter-failed .smd-counter-num
 {
-    color: rgb(255, 110, 110);
+  color: rgb(255, 110, 110);
 }
 
 /*
@@ -445,8 +529,8 @@
  */
 @media (max-width: 800px)
 {
-    .smd-counter
-    {
-        bottom: calc(72px + env(safe-area-inset-bottom, 0px));
-    }
+  .smd-counter
+  {
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
 }

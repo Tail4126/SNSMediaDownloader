@@ -14,14 +14,22 @@
  *
  * 【X の動作を遅くしないための工夫】
  * X は API の応答を大量に受け取るので、ここでの処理はすべて X の画面表示の上乗せになります。
- *   - メディアを含まない応答は、JSON として解析する前に、文字列の検索だけで見送る
- *   - 解析と走査は、ブラウザの手が空いたとき（requestIdleCallback）に回す
+ *   - メディアを含まない応答は、受け取ったその場で、文字列の検索だけで見送る（解析も後回しもしない）
+ *   - メディアを含む応答の解析と走査は、ブラウザの手が空いたとき（requestIdleCallback）に回す
  *   - JSON を走査するときに、余計な配列を作らない
  * ==================================================================
  */
 
 (() => {
     "use strict";
+
+    // 拡張機能を再読み込み・更新すると、Firefox は開いているタブへ content script を入れ直すので、
+    // このファイルが同じページで 2 回動くことがあります。fetch と XMLHttpRequest を 2 重に包むと、
+    // 応答を毎回 2 回ずつ複製して調べることになるので、2 回目は何もしません
+    // （1 回目に包んだものが、同じ形の知らせを送り続けます）。
+    const INSTALLED = Symbol.for("smd-interceptor");
+    if (window[INSTALLED]) return;
+    Object.defineProperty(window, INSTALLED, { value: true });
 
     /**
      * メディアを含む応答にだけ現れる文字列。
@@ -144,13 +152,16 @@
     };
 
     /**
-     * 応答の本文（文字列）を調べる。メディアを含まないものは、解析せずに見送ります。
+     * 応答の本文（文字列）を調べる。
+     * メディアを含まないもの（ほとんどの応答）は、この場で見送ります。手が空くまで後回しにすると、
+     * その間ずっと使わない本文をメモリに持ち続けることになるためです（文字列の検索は、解析よりずっと軽く済みます）。
+     * メディアを含むものだけ、解析と走査をブラウザの手が空いたときに回します。
      *
      * @param {string} text
      * @returns {void}
      */
     const scanText = (text) => {
-        if (text.includes(MEDIA_HINT)) scan(JSON.parse(text));
+        if (text.includes(MEDIA_HINT)) later(() => scan(JSON.parse(text)));
     };
 
     // ================================================================
@@ -167,7 +178,7 @@
             // 本文は 1 回しか読めないので、clone() した複製のほうを文字列で読みます。
             // 解析するかどうかは、文字列を見てから決めます。
             promise
-                .then((res) => res.ok && res.clone().text().then((text) => later(() => scanText(text))))
+                .then((res) => res.ok && res.clone().text().then(scanText))
                 .catch(() => {});
         }
         return promise;
@@ -192,9 +203,8 @@
                         // 後回しにせず、この場で調べます（解析し直す必要が無いので軽く済みます）。
                         scan(this.response);
                     } else if (this.responseType === "" || this.responseType === "text") {
-                        // 文字列は後から変わらないので、受け取っておいて手が空いたときに調べます。
-                        const text = this.responseText;
-                        later(() => scanText(text));
+                        // 文字列は後から変わらないので、解析は手が空いたときに回せます（scanText 参照）。
+                        scanText(this.responseText);
                     }
                 } catch {
                     // 対象外の応答です。

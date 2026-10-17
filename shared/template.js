@@ -2,28 +2,22 @@
 /**
  * shared/template.js
  * ==================================================================
- * 「設定」「ファイル名テンプレート」「多言語メッセージ」を担当するモジュール（globalThis.SMD）。
- * content script と設定画面（popup.js）の両方から使われます。
+ * 「設定」と「ファイル名テンプレート」を担当するモジュール（globalThis.SMD）。
+ * バックグラウンド（background.js）と設定画面（popup.js）の両方から使われます。
+ * 同じものを使うので、設定画面のプレビューに出るファイル名と、実際に保存されるファイル名が一致します。
  *
- *   SMD.t()             翻訳文字列の取得
- *   SMD.loadSettings()  保存された設定を読み、不正な値を既定値へ直して返す
- *   SMD.CONFLICT_ACTIONS  このブラウザで使える「同名ファイルがあるときの動作」
- *   SMD.buildPath()     "{user}-{id}.{ext}" のようなテンプレートを保存先の相対パスへ変換
+ *   SMD.loadSettings()      保存された設定を読み、不正な値を既定値へ直して返す
+ *   SMD.CONFLICT_ACTIONS    このブラウザで使える「同名ファイルがあるときの動作」
+ *   SMD.IS_FIREFOX          Firefox で動いているか
+ *   SMD.buildPath()         "{user}-{id}.{ext}" のようなテンプレートを保存先の相対パスへ変換
  *   SMD.tokensIn() / SMD.dropEscaped()  設定画面の入力チェック用
+ *
+ * ページに読み込まれる content script からは使いません（ファイル名はバックグラウンドが組み立てます）。
  * ==================================================================
  */
 
 globalThis.SMD = (() => {
     "use strict";
-
-    /**
-     * _locales/<言語>/messages.json から翻訳済みの文字列を取り出す。
-     *
-     * @param {string} key - メッセージのキー
-     * @param {...unknown} subs - $1, $2 ... に差し込む値
-     * @returns {string} 見つからなければ key をそのまま返す
-     */
-    const t = (key, ...subs) => chrome.i18n.getMessage(key, subs.map(String)) || key;
 
     // ================================================================
     // 設定
@@ -37,20 +31,21 @@ globalThis.SMD = (() => {
         likeDownload: false,        // 「いいね」と同時に保存するか（押した覚えのない保存は驚きが大きいので既定はオフ）
     };
 
+    /** Firefox か。拡張機能の URL が moz-extension: で始まるかどうかで見分けます */
+    const IS_FIREFOX = chrome.runtime.getURL("").startsWith("moz-extension:");
+
     /**
      * このブラウザの downloads API が受け付ける conflictAction の値。
-     * Firefox は "prompt"（保存先を尋ねる）を実装しておらず、指定すると保存がすべて失敗するため外します。
-     * 拡張機能の URL が moz-extension: で始まるかどうかで Firefox を見分けます
+     * Firefox は "prompt"（保存先を尋ねる）を実装しておらず、指定すると保存がすべて失敗するため外します
      * （設定画面はこの一覧に無い選択肢を隠し、loadSettings は既定値へ直します）。
      */
-    const CONFLICT_ACTIONS = chrome.runtime.getURL("").startsWith("moz-extension:")
-        ? ["uniquify", "overwrite"]
-        : ["uniquify", "overwrite", "prompt"];
+    const CONFLICT_ACTIONS = IS_FIREFOX ? ["uniquify", "overwrite"] : ["uniquify", "overwrite", "prompt"];
 
     /**
      * 保存された設定を読み、型や値がおかしい項目を既定値へ直して返す。
      * conflictAction に知らない値が入っていると downloads API が例外を投げ、
      * すべての保存が失敗してしまうため、使う前に必ずここを通します。
+     * 読めなかったときは既定値を使います。
      *
      * @returns {Promise<typeof DEFAULTS>}
      */
@@ -73,10 +68,9 @@ globalThis.SMD = (() => {
      * 見た目上の 1 文字（絵文字の結合も含む）単位で文字列を区切るための道具。
      * 絵文字や「👨‍👩‍👧」のような結合文字を途中で切らないために使います。
      *
-     * 作るときに文字の区切り方のデータを読み込むため、ページを開いた直後だと 10 ミリ秒前後かかります
-     * （Chromium 141 での計測）。このファイルは X・Bluesky・ポイピク・Privatter・Privatter+ のページを開くたびに読み込まれますが、
-     * 区切る必要があるのは長い名前を切り詰めるときだけです。そこで読み込み時には作らず、
-     * 初めて使うときに作ります（graphemes() 参照）。
+     * 作るときに文字の区切り方のデータを読み込むので、少し時間がかかります。区切る必要があるのは
+     * 長い名前を切り詰めるときだけなので、読み込み時には作らず、初めて使うときに作ります（graphemes() 参照）。
+     * バックグラウンドが起こされるたび・設定画面を開くたびに、使わない準備をせずに済みます。
      * @type {Intl.Segmenter|undefined}
      */
     let segmenter;
@@ -168,11 +162,42 @@ globalThis.SMD = (() => {
      */
     const TOKEN = /\{(\w+\??)(?::(\d+))?\}/g;
 
-    /** ファイル名に使えない文字（Windows の禁止文字と制御文字） */
-    const FORBIDDEN = /[\\/:*?"<>|\u0000-\u001f\u007f]/g;
+    /**
+     * ファイル名に使えない文字。Chrome と Firefox のダウンロード API が、1 文字でも含むと
+     * 保存そのものを拒否する（Chrome は "Invalid filename"、Firefox は "illegal characters"）文字です。
+     *   - Windows の禁止文字 \ / : * ? " < > |
+     *   - 制御文字（\p{Cc}。C0・DEL に加えて U+0080〜U+009F も）
+     *   - 書式文字（\p{Cf}）。ゼロ幅接合子（U+200D）・ゼロ幅スペース・ソフトハイフン・左右の向きの制御・
+     *     BOM・国旗などのタグ文字が当てはまります。ゼロ幅接合子は 👨‍💻 のような結合絵文字の中にあるので、
+     *     取り除くと絵文字が分かれて表示されますが、残すと保存できません
+     *   - 非文字（U+FFFE など）と、対になっていないサロゲート
+     * 空白（改行・タブ・ノーブレークスペースなど）は、ここではなく normalize() で半角スペースにします。
+     */
+    const FORBIDDEN = /[\\/:*?"<>|\p{Cc}\p{Cf}\p{Cs}\p{Noncharacter_Code_Point}]/gu;
 
-    /** Windows で予約されていてファイル名にできない名前（拡張子が付いていても不可） */
-    const RESERVED = /^(?:con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(?:\.|$)/i;
+    /**
+     * ファイル名にできない名前（拡張子が付いていても不可）。先頭に "_" を付けて避けます。
+     * Windows の予約名（CON・NUL・COM1 など。CLOCK$ も Chrome が拒否します）と、
+     * Chrome が拒否するエクスプローラーの設定ファイル名（desktop.ini・Thumbs.db）です。
+     */
+    const RESERVED = /^(?:(?:con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³]|clock\$)(?:\.|$)|(?:desktop\.ini|thumbs\.db)$)/i;
+
+    /**
+     * ブラウザが保存を拒否する拡張子（OS のショートカットや設定として扱われるもの）。
+     * Chrome は .lnk / .local / .{…}（CLSID）を、Firefox は .lnk / .local / .url / .scf / .desktop を拒否します。
+     * フォルダ名でも同じなので、どの階層でも、当てはまれば末尾に "_" を足して避けます。
+     */
+    const SHELL_EXT = /\.(?:lnk|local|url|scf|desktop|\{[^}]*\})$/i;
+
+    /**
+     * 空白をまとめてから、使えない文字を取り除く。
+     * 改行やタブも制御文字なので、先に空白へ変えておかないと前後の単語がくっついてしまいます。
+     * 取り除いた跡に空白が続くこともあるので、最後にもう一度まとめます。
+     *
+     * @param {string} text
+     * @returns {string}
+     */
+    const normalize = (text) => text.replace(/\s+/g, " ").replace(FORBIDDEN, "").replace(/\s+/g, " ");
 
     /**
      * 1 階層（フォルダ名またはファイル名）の上限バイト数（UTF-8）。
@@ -192,8 +217,11 @@ globalThis.SMD = (() => {
     const CHAR = { "\u0001": "[", "\u0002": "]" };
 
     /** メディア種別・サイト名をファイル名向けの短い表記へ */
-    const KIND = { photo: "img", video: "vid", animated_gif: "gif" };
-    const SITE = { x: "x", bluesky: "bsky", poipiku: "poipiku", privatter: "privatter", privatterplus: "privatterplus" };
+    const KIND = { photo: "img", video: "vid", animated_gif: "gif", audio: "aud" };
+    const SITE = {
+        x: "x", bluesky: "bsky", poipiku: "poipiku", privatter: "privatter", privatterplus: "privatterplus", skeb: "skeb",
+        niconico: "niconico",
+    };
 
     /** 日時が取れなかったときの「全部空文字」の日時変数 */
     const NO_DATE = { yyyy: "", mm: "", dd: "", hh: "", mi: "", ss: "", date: "", time: "", datetime: "" };
@@ -246,7 +274,7 @@ globalThis.SMD = (() => {
         return {
             ...dateVars(post.time),
 
-            site: SITE[post.site] ?? post.site ?? "",
+            site: (Object.hasOwn(SITE, post.site) ? SITE[post.site] : post.site) ?? "",
             user: post.screenName ?? "",
             name: post.name ?? "",
             id: post.postId ?? "",
@@ -260,7 +288,7 @@ globalThis.SMD = (() => {
             "n?": total > 1 ? String(index) : "", // 複数枚のときだけ番号を付ける
             total: String(total),
 
-            kind: KIND[item.kind] ?? "img",
+            kind: Object.hasOwn(KIND, item.kind) ? KIND[item.kind] : "img",
             ext: item.ext ?? "bin",
             media_id: item.id || guess.id,
             res: item.res || guess.res,
@@ -280,7 +308,7 @@ globalThis.SMD = (() => {
         // Object.hasOwn で確かめるのは、{toString} や {constructor} のような名前で
         // Object が元から持っている関数を拾い、その中身がファイル名に入ってしまうのを防ぐためです。
         const value = Object.hasOwn(vars, key) ? vars[key] : "";
-        const raw = String(value ?? "").replace(FORBIDDEN, "").replace(/\s+/g, " ").trim();
+        const raw = normalize(String(value ?? "")).trim();
         return limit ? firstGraphemes(raw, Number(limit)).trim() : raw;
     };
 
@@ -312,18 +340,39 @@ globalThis.SMD = (() => {
      *
      * @param {string} name
      * @param {number} maxBytes - この階層に使える最大バイト数
+     * @param {{beforeExt?: boolean}} [options] - beforeExt: 拡張子の前の本体か（末尾の「~」を残す）
      * @returns {string} 空文字なら、その階層は捨てる
      */
-    const cleanSegment = (name, maxBytes) => {
-        const tidy = (s) => s.replace(/^[\s.]+|[\s.]+$/g, ""); // 前後の空白とドット（Windows で不可）を除く
+    const cleanSegment = (name, maxBytes, { beforeExt = false } = {}) => {
+        // 前後の空白とドット（Windows で不可）と「~」を除きます。
+        // 「~」は途中にあれば問題ありませんが、階層の先頭か末尾にあると Chrome が保存を拒否し、
+        // 先頭にあると Firefox も「絶対パス」とみなして拒否します（"~Mika~/…" や、本文が「よろしく~」で終わる
+        // フォルダ名など）。拡張子の前の本体（beforeExt）の末尾は階層の末尾ではないので、「~」を残します。
+        const tidy = beforeExt
+            ? (s) => s.replace(/^[\s.~]+|[\s.]+$/g, "")
+            : (s) => s.replace(/^[\s.~]+|[\s.~]+$/g, "");
 
-        let out = tidy(clipBytes(tidy(name.replace(FORBIDDEN, "").replace(/\s+/g, " ")), maxBytes));
+        return tidy(clipBytes(tidy(normalize(name)), maxBytes));
+    };
+
+    /**
+     * 整えた 1 階層分の名前が、ファイル名にできない名前（予約名・拒否される拡張子）なら、少しだけ変えて避ける。
+     * 拡張子を付けた後の名前で確かめる必要があるので（"desktop" + ".ini" など）、cleanSegment とは分けています。
+     *
+     * @param {string} name - cleanSegment で整えた名前（空なら空のまま返す）
+     * @returns {string}
+     */
+    const avoidReserved = (name) => {
+        let out = name;
         if (RESERVED.test(out)) out = `_${out}`;
+        if (SHELL_EXT.test(out)) out = `${out}_`;
         return out;
     };
 
     /**
      * 設定とコンテキストから、ダウンロード API に渡す相対パスを作る。
+     * どんな値が来ても、Chrome と Firefox の両方が受け付ける、ダウンロードフォルダの中の相対パスになります
+     * （「/」で始まらず、空の階層も「.」「..」の階層も無く、使えない文字・名前を含まない）。
      *
      * @param {{ file: string }} settings
      * @param {object} ctx - buildVars() に渡す情報（post / item / now）
@@ -339,14 +388,22 @@ globalThis.SMD = (() => {
         // 拡張子は別扱いにして、本体を切り詰めても拡張子が消えないようにします。
         // dot > 0 なので ".gitignore" のような先頭ドットは拡張子とみなしません。
         const dot = name.lastIndexOf(".");
-        const rawExt = dot > 0 ? name.slice(dot + 1).replace(FORBIDDEN, "").trim() : "";
+        const rawExt = dot > 0 ? normalize(name.slice(dot + 1)).replace(/^[\s~]+|[\s~]+$/g, "") : "";
         const ext = rawExt && utf8Length(rawExt) <= MAX_EXT_BYTES ? `.${rawExt}` : "";
         const stem = ext ? name.slice(0, dot) : name;
 
-        const folders = parts.map((p) => cleanSegment(p, MAX_SEGMENT_BYTES)).filter(Boolean);
-        const file = cleanSegment(stem, MAX_SEGMENT_BYTES - utf8Length(ext)) || "download";
+        const folders = parts.map((p) => avoidReserved(cleanSegment(p, MAX_SEGMENT_BYTES))).filter(Boolean);
+        const file = cleanSegment(stem, MAX_SEGMENT_BYTES - utf8Length(ext), { beforeExt: ext !== "" }) || "download";
 
-        return [...folders, file + ext].join("/");
+        // Firefox は、ファイル名の最後の「.」より後ろ（拡張子とみなす部分）に空白があると、保存を拒否します
+        // （"{id}.{text}" や "{id}.{ext} ({n})" のようなテンプレート）。その部分の空白は "_" にします。
+        let leaf = file + ext;
+        const last = leaf.lastIndexOf(".");
+        if (last >= 0 && /\s/.test(leaf.slice(last + 1))) {
+            leaf = `${leaf.slice(0, last + 1)}${leaf.slice(last + 1).replace(/\s/g, "_")}`;
+        }
+
+        return [...folders, avoidReserved(leaf)].join("/");
     };
 
     /**
@@ -368,7 +425,8 @@ globalThis.SMD = (() => {
     return {
         DEFAULTS,
         CONFLICT_ACTIONS,
+        IS_FIREFOX,
         VARIABLE_NAMES: Object.keys(buildVars({})),
-        loadSettings, buildPath, tokensIn, dropEscaped, t,
+        loadSettings, buildPath, tokensIn, dropEscaped,
     };
 })();
