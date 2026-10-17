@@ -120,6 +120,9 @@ in a special case.
 `getMedia()` may fill in fields on the `post` object it's given; the Bluesky adapter uses this to
 backfill text and timestamp from the API. Don't overwrite good values with empty ones.
 
+Before writing a small helper into an adapter, check `SMDCore` — `decode()`, `textOf()`, `jstTime()`
+and `photoOf()` already cover what the existing adapters needed more than once.
+
 ## Adding a placeholder
 
 A placeholder is not one change, it's five. See the table below. The value must be a string, and
@@ -139,7 +142,7 @@ Some facts live in more than one file. Change only one and the project starts co
 
 | If you change… | Also update… |
 | :--- | :--- |
-| A template placeholder | `shared/template.js` (`buildVars()`) · `popup.js` (`TOKENS`) · `_locales/*/messages.json`, all nine · the placeholder tables in `README.md` / `README.ja.md` · `TIPS.md` |
+| A template placeholder | `shared/template.js` (`buildVars()`) · `popup.js` (`TOKENS`) · `_locales/*/messages.json`, all nine · the placeholder tables in `README.md` / `README.ja.md` · `TIPS.md` — and if its value comes from a new field of the post or the media, `background.js` too (`postInfo()` and the `media` object in `HANDLERS.download`), which only passes on the fields it knows |
 | A setting, or its default | `shared/template.js` (`DEFAULTS`) · the row markup in `popup.html` · `popup.js` (`FIELDS`) · `_locales/*/messages.json`, all nine · the settings tables in `README.md` / `README.ja.md` |
 | A UI label or a toast | `_locales/*/messages.json`, all nine — the English file is the source of truth for the key set |
 | A site adapter's selectors | Nothing else, but say in the PR which page states you tested (timeline, thread, permalink, quote post) |
@@ -148,8 +151,9 @@ Some facts live in more than one file. Change only one and the project starts co
 | What gets stored, which permissions are used, or which hosts are contacted | `PRIVACY.md` — the body **and** the "Last updated" date, in the same commit · the privacy sections of both READMEs |
 | The selectors an adapter's `mediaContainers()`, `postId()` or `actionBar()` rely on | That adapter's `watch` selector too — only changes matching it make the buttons look again, so a missing entry means buttons that don't appear or don't update |
 | What `getMedia()` returns | Keep it in the same order as `mediaContainers()`, with `null` for unknown items — item buttons, the saved-media record and `{n}` all rely on the position |
-| The messages between the background and the tabs (`download`, `smdState`, `smdUpdate`, `smdBatch`) | `background.js` (`HANDLERS`, `broadcast()`) · `shared/core.js` (`save()` and the `onMessage` listener in `start()`) — both ends validate what they receive, keep it that way |
+| The messages between the background and the tabs (`download`, `smdState`, `smdUpdate`, `smdBatch`) | `background.js` (`HANDLERS`, `notify()`) · `shared/core.js` (`save()`, and `sync()` and the `onMessage` listener in `start()`) — both ends validate what they receive, keep it that way |
 | The saved-media record's shape, or when it's cleared | `background.js` · `shared/core.js` · `PRIVACY.md` §1.2 and §5 (en/ja) · the saved-state sections of both READMEs |
+| Which characters or names a file name may contain | `shared/template.js` (`FORBIDDEN`, `RESERVED`, `SHELL_EXT`, `cleanSegment()`, `buildPath()`) · "Rules the renderer applies for you" in both READMEs — the background builds every file name with `buildPath()` itself, so that is the only place the rules live. They are whatever Chrome and Firefox both accept, so check a change against both |
 
 ## Pull requests
 
@@ -300,6 +304,9 @@ JSON ファイル（`manifest.json`、`_locales/*/messages.json`）は対象外�
 Bluesky のアダプタは、これを使って本文と投稿日時を API の結果で補っています。
 ただし空の値で良い値を上書きしないよう注意してください。
 
+アダプタに小さな関数を書く前に、`SMDCore` を見てください。`decode()`・`textOf()`・`jstTime()`・`photoOf()` は、
+今あるアダプタで何度も必要になったものをまとめたものです。
+
 ## 変数（プレースホルダ）を追加する
 
 変数の追加は 1 か所の変更ではなく 5 か所の変更です。下の表を見てください。
@@ -320,7 +327,7 @@ Bluesky のアダプタは、これを使って本文と投稿日時を API の�
 
 | 変更する対象 | 一緒に更新するもの |
 | :--- | :--- |
-| テンプレート変数 | `shared/template.js` の `buildVars()` ・ `popup.js` の `TOKENS` ・ `_locales/*/messages.json` 9 言語 ・ README 英日の変数表 ・ `TIPS.md` |
+| テンプレート変数 | `shared/template.js` の `buildVars()` ・ `popup.js` の `TOKENS` ・ `_locales/*/messages.json` 9 言語 ・ README 英日の変数表 ・ `TIPS.md` — 値が投稿やメディアの新しい項目から来るなら `background.js` も（`postInfo()` と `HANDLERS.download` の `media`。知っている項目しか受け渡しません） |
 | 設定項目、その既定値 | `shared/template.js` の `DEFAULTS` ・ `popup.html` の行の記述 ・ `popup.js` の `FIELDS` ・ `_locales/*/messages.json` 9 言語 ・ README 英日の設定表 ・ `PRIVACY.md` §1.1 の保存内容の表（英日）|
 | UI の文言、トーストの文言 | `_locales/*/messages.json` 9 言語（キーの集合は英語版が基準） |
 | アダプタのセレクタ | 他は不要ですが、どのページ状態で確認したかをプルリクエストに書いてください（タイムライン・スレッド・パーマリンク・引用投稿） |
@@ -329,8 +336,9 @@ Bluesky のアダプタは、これを使って本文と投稿日時を API の�
 | 保存内容、使用する権限、通信先 | `PRIVACY.md` の本文**および**「最終更新」日を、同じコミットで ・ README 英日のプライバシー節 |
 | アダプタの `mediaContainers()`・`postId()`・`actionBar()` が頼るセレクタ | そのアダプタの `watch` も合わせて直す — これに当てはまる変化でしかボタンを見直さないので、漏れがあるとボタンが出ない・更新されない原因になります |
 | `getMedia()` の戻り値 | `mediaContainers()` と同じ並びを保ち、分からないものは `null` にする — 個別ボタン・保存済みの記録・`{n}` がすべて位置に依存しています |
-| バックグラウンドとタブの間のメッセージ（`download`・`smdState`・`smdUpdate`・`smdBatch`） | `background.js` の `HANDLERS` と `broadcast()` ・ `shared/core.js` の `save()` と `start()` 内の `onMessage` リスナー — 受け取った値はどちらの側でも検証しています。その形を崩さないでください |
+| バックグラウンドとタブの間のメッセージ（`download`・`smdState`・`smdUpdate`・`smdBatch`） | `background.js` の `HANDLERS` と `notify()` ・ `shared/core.js` の `save()`、`start()` 内の `sync()` と `onMessage` リスナー — 受け取った値はどちらの側でも検証しています。その形を崩さないでください |
 | 保存済みの記録の形式、消えるタイミング | `background.js` ・ `shared/core.js` ・ `PRIVACY.md` §1.2 と §5（英日） ・ README 英日の保存済みの表示の節 |
+| ファイル名に使ってよい文字・名前の規則 | `shared/template.js` の `FORBIDDEN`・`RESERVED`・`SHELL_EXT`・`cleanSegment()`・`buildPath()` ・ README 英日の「変換時に自動で行われること」 — ファイル名はバックグラウンドが `buildPath()` で組み立てるので、規則はここ 1 か所にだけあります。規則は「Chrome と Firefox の両方が受け付けるもの」なので、変えたら両方で確かめてください |
 
 ## プルリクエスト
 

@@ -3,7 +3,7 @@
 
     "name": "__MSG_extName__",
     "short_name": "__MSG_extName__",
-    "version": "1.5.0",
+    "version": "1.6.0",
     "description": "__MSG_extDesc__",
 
     "default_locale": "en",
@@ -31,7 +31,11 @@
         "https://poipiku.com/*",
         "https://cdn.poipiku.com/*",
         "https://privatter.net/*",
-        "https://privatter.me/*"
+        "https://privatter.me/*",
+        "https://skeb.jp/*",
+        "https://seiga.nicovideo.jp/*",
+        "https://manga.nicovideo.jp/*",
+        "https://lohas.nicoseiga.jp/*"
     ],
 
     "content_scripts": [
@@ -52,7 +56,6 @@
                 "https://twitter.com/*"
             ],
             "js": [
-                "shared/template.js",
                 "shared/core.js",
                 "sites/x/content.js"
             ],
@@ -66,7 +69,6 @@
                 "https://bsky.app/*"
             ],
             "js": [
-                "shared/template.js",
                 "shared/core.js",
                 "sites/bluesky/content.js"
             ],
@@ -80,7 +82,6 @@
                 "https://poipiku.com/*"
             ],
             "js": [
-                "shared/template.js",
                 "shared/core.js",
                 "sites/poipiku/content.js"
             ],
@@ -95,7 +96,6 @@
                 "https://privatter.net/p/*"
             ],
             "js": [
-                "shared/template.js",
                 "shared/core.js",
                 "sites/privatter/content.js"
             ],
@@ -109,9 +109,35 @@
                 "https://privatter.me/page/*"
             ],
             "js": [
-                "shared/template.js",
                 "shared/core.js",
                 "sites/privatterplus/content.js"
+            ],
+            "css": [
+                "content.css"
+            ],
+            "run_at": "document_end"
+        },
+        {
+            "matches": [
+                "https://skeb.jp/*"
+            ],
+            "js": [
+                "shared/core.js",
+                "sites/skeb/content.js"
+            ],
+            "css": [
+                "content.css"
+            ],
+            "run_at": "document_end"
+        },
+        {
+            "matches": [
+                "https://seiga.nicovideo.jp/seiga/im*",
+                "https://manga.nicovideo.jp/watch/mg*"
+            ],
+            "js": [
+                "shared/core.js",
+                "sites/niconico/content.js"
             ],
             "css": [
                 "content.css"
@@ -121,7 +147,7 @@
     ],
 
     "background": {
-        "scripts": [ "background.js" ]
+        "scripts": [ "shared/template.js", "background.js" ]
     },
 
     "action": {

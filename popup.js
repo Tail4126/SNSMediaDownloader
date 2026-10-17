@@ -10,7 +10,7 @@
  *   - 設定の自動保存（「保存」ボタンはありません）
  *
  * popup.html で shared/template.js（SMD）を先に読み込んでいるので、
- * 翻訳・既定値・ファイル名の組み立ては、content script と同じものを使えます。
+ * 既定値・ファイル名の組み立ては、保存するときのバックグラウンドと同じものを使えます。
  * プレビューに出るファイル名が、実際に保存されるファイル名と一致するのはこのためです。
  * ==================================================================
  */
@@ -18,8 +18,14 @@
 (() => {
     "use strict";
 
-    /** 翻訳文字列を取り出す関数（SMD.t の短縮名） */
-    const t = SMD.t;
+    /**
+     * _locales/<言語>/messages.json から翻訳済みの文字列を取り出す。
+     *
+     * @param {string} key - メッセージのキー
+     * @param {...unknown} subs - $1, $2 ... に差し込む値
+     * @returns {string} 見つからなければ key をそのまま返す
+     */
+    const t = (key, ...subs) => chrome.i18n.getMessage(key, subs.map(String)) || key;
 
     /**
      * document.getElementById の短縮版。
@@ -28,14 +34,6 @@
      * @returns {HTMLElement}
      */
     const $ = (id) => document.getElementById(id);
-
-    /**
-     * HTML に埋め込んでも安全な形へ変換する（< > & " を文字参照へ）。
-     *
-     * @param {unknown} s
-     * @returns {string}
-     */
-    const esc = (s) => String(s).replace(/[<>&"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
     /**
      * 何度も使う要素。入力のたびに探し直さないよう、ここで 1 度だけ取り出しておきます
@@ -89,7 +87,7 @@
         ]],
         [t("grpMedia"), [
             ["{n}", t("phN")], ["{nn}", t("phNn")], ["{n?}", t("phNq")], ["{total}", t("phTotal")],
-            ["{kind}", "img / vid / gif"], ["{ext}", t("phExt")],
+            ["{kind}", "img / vid / gif / aud"], ["{ext}", t("phExt")],
             ["{media_id}", t("phMediaId")], ["{res}", t("phRes")],
         ]],
         [t("grpSyntax"), [
@@ -107,7 +105,7 @@
     const blob = (cid) => `https://bsky.social/xrpc/com.atproto.sync.getBlob?did=did%3Aplc%3Aexample&cid=${cid}`;
 
     /**
-     * プレビューに出す 7 パターンのサンプル（X / Bluesky × 画像 / 動画、ポイピク・Privatter・Privatter+ の画像）。
+     * プレビューに出す 9 パターンのサンプル（X / Bluesky × 画像 / 動画、ポイピク・Privatter・Privatter+・Skeb・ニコニコ静画の画像）。
      * 「複数枚のとき」と「1 枚のとき」の違い（{n?} など）も確かめられるようにしてあります。
      * ポイピクは投稿日時が取れないので、日時の変数が空になる様子も確かめられます。
      */
@@ -156,6 +154,18 @@
             item: { url: "https://media.privatter.me/img/123456/original/12345678906abcdef01234.png",
                 kind: "photo", ext: "png", id: "12345678906abcdef01234", res: "", index: 2, total: 4 },
         }],
+        [`Skeb · ${t("sampleImage24")}`, {
+            post: { site: "skeb", screenName: "example_user", name: t("sampleUserName"),
+                postId: "12", recordId: "example_user/12", text: t("sampleText"), time: null },
+            item: { url: "https://si.imgix.net/0a1b2c3d/uploads/origins/01234567-89ab-cdef-0123-456789abcdef?fm=webp&w=800",
+                kind: "photo", ext: "webp", id: "01234567-89ab-cdef-0123-456789abcdef", res: "800x1000", index: 2, total: 4 },
+        }],
+        [`${t("siteNiconico")} · ${t("sampleImage11")}`, {
+            post: { site: "niconico", screenName: "1234567", name: t("sampleUserName"),
+                postId: "im12345678", text: t("sampleText"), time: "2026-08-19T14:25:30+09:00" },
+            item: { url: "https://lohas.nicoseiga.jp/priv/0123456789abcdef0123456789abcdef01234567/1790000000/12345678",
+                kind: "photo", ext: "jpg", id: "12345678", res: "", index: 1, total: 1 },
+        }],
     ];
 
     /**
@@ -167,10 +177,13 @@
         const settings = readForm();
         const now = new Date();
 
-        // ユーザーの入力を含む値は、必ず esc() を通してから innerHTML に入れます。
-        preview.innerHTML = SAMPLES.map(([label, ctx]) =>
-            `<div><b>${esc(label)}</b><code>${esc(SMD.buildPath(settings, { ...ctx, now }))}</code></div>`
-        ).join("");
+        // ユーザーの入力を含む値なので、HTML として解釈させず、textContent で入れます。
+        preview.replaceChildren(...SAMPLES.map(([label, ctx]) => {
+            const row = document.createElement("div");
+            row.appendChild(document.createElement("b")).textContent = label;
+            row.appendChild(document.createElement("code")).textContent = SMD.buildPath(settings, { ...ctx, now });
+            return row;
+        }));
 
         const warnings = [];
 
@@ -197,21 +210,44 @@
 
     let saveTimer = 0;
     let statusTimer = 0;
+    let retryTimer = 0;
 
     /**
-     * すぐに保存し、「保存しました」を短く表示する。
+     * 保存の結果を表示する。成功は短く出して消し、失敗は保存できるまで出したままにします。
      *
+     * @param {boolean} ok
      * @returns {void}
      */
-    const save = () => {
+    const showStatus = (ok) => {
+        status.textContent = t(ok ? "statusSaved" : "statusSaveFailed");
+        status.classList.toggle("error", !ok);
+        status.classList.add("show");
+        clearTimeout(statusTimer);
+        if (ok) statusTimer = setTimeout(() => status.classList.remove("show"), 1200);
+    };
+
+    /**
+     * すぐに保存し、結果を表示する。
+     *
+     * storage.sync には 1 分あたり・1 時間あたりの書き込み回数の上限があり、スイッチを続けて切り替えたときなどに
+     * 超えると保存に失敗します。失敗を黙って見送ると、画面と保存された設定が食い違ったままになるので、
+     * 知らせたうえで、少し待ってから（その時点の画面の内容で）やり直します。
+     *
+     * @returns {Promise<void>}
+     */
+    const save = async () => {
         clearTimeout(saveTimer);
         saveTimer = 0;
+        clearTimeout(retryTimer);
+        retryTimer = 0;
 
-        chrome.storage.sync.set(readForm()).then(() => {
-            status.classList.add("show");
-            clearTimeout(statusTimer);
-            statusTimer = setTimeout(() => status.classList.remove("show"), 1200);
-        }, () => {});
+        try {
+            await chrome.storage.sync.set(readForm());
+            showStatus(true);
+        } catch {
+            showStatus(false);
+            retryTimer = setTimeout(save, 5000);
+        }
     };
 
     /**
@@ -243,13 +279,21 @@
     for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = t(el.dataset.i18n);
     $("version").textContent = `v${chrome.runtime.getManifest().version}`;
 
-    // 変数一覧のボタンを組み立てます。
-    placeholders.innerHTML = TOKENS.map(([group, tokens]) =>
-        `<div class="ph-group"><h3>${esc(group)}</h3>` + tokens.map(([token, description]) =>
-            `<button type="button" class="token" data-token="${esc(token)}">` +
-            `<code>${esc(token)}</code><span>${esc(description)}</span></button>`
-        ).join("") + "</div>"
-    ).join("");
+    // 変数一覧のボタンを組み立てます（文言は textContent で入れるので、HTML として解釈されません）。
+    for (const [group, tokens] of TOKENS) {
+        const box = placeholders.appendChild(document.createElement("div"));
+        box.className = "ph-group";
+        box.appendChild(document.createElement("h3")).textContent = group;
+
+        for (const [token, description] of tokens) {
+            const button = box.appendChild(document.createElement("button"));
+            button.type = "button";
+            button.className = "token";
+            button.dataset.token = token;
+            button.appendChild(document.createElement("code")).textContent = token;
+            button.appendChild(document.createElement("span")).textContent = description;
+        }
+    }
 
     // 変数ボタン: カーソル位置（選択範囲）に変数を挿入します。
     // ボタン 1 個ずつではなく親要素でまとめて受け取り（イベント委譲）、closest で押されたボタンを探します。
@@ -275,8 +319,8 @@
     fileInput.addEventListener("change", save);
     for (const id of ["conflictAction", "alwaysSaveAs", "likeDownload"]) $(id).addEventListener("change", save);
 
-    // ポップアップは外をクリックしただけで閉じるので、保存待ちの入力があれば閉じる前に保存します。
-    addEventListener("pagehide", () => { if (saveTimer) save(); });
+    // ポップアップは外をクリックしただけで閉じるので、保存待ち（やり直し待ちを含む）があれば閉じる前に保存します。
+    addEventListener("pagehide", () => { if (saveTimer || retryTimer) save(); });
 
     // 保存済みの設定を読み込んで画面に反映します（不正な値は既定値へ直したうえで）。
     SMD.loadSettings().then(writeForm);

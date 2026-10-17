@@ -7,9 +7,9 @@
     ツールバーのアイコンを押したときに開く設定画面。
     manifest.json では 2 か所から参照されています。
 
-        action.default_popup   → アイコンクリックで小さなポップアップとして表示
-        options_ui.page        → 拡張機能の管理画面から「オプション」で開く
-                               （open_in_tab: true なのでタブとして開きます）
+        action.default_popup    → アイコンクリックで小さなポップアップとして表示
+        options_ui.page         → 拡張機能の管理画面から「オプション」で開く
+                                （open_in_tab: true なのでタブとして開きます）
 
     このファイルには「箱」だけを書き、中の文字は一切書いていません。
     表示される文言はすべて popup.js が実行時に流し込みます。
@@ -84,7 +84,7 @@
             -->
             <label class="field-label" for="file" data-i18n="labelFile"></label><input type="text" id="file" maxlength="500" spellcheck="false" autocomplete="off"><p id="warning"></p>
 
-            <!-- ライブプレビューの表示先。popup.js が 7 パターンのサンプルを描画します -->
+            <!-- ライブプレビューの表示先。popup.js が 9 パターンのサンプルを描画します -->
             <div id="preview"></div>
 
             <!--

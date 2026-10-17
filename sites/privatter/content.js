@@ -40,6 +40,9 @@
     /** 画像の URL。[1] がファイル名（例: "20758042846ac9137a5788c.jpg"） */
     const IMAGE_URL = /^https:\/\/d2pqhom6oey9wx\.cloudfront\.net\/img_(?:original|resize)\/([\w.-]+)$/;
 
+    /** 投稿日時の表記（"2026-10-10 01:16:59"）。[1]〜[6] が年・月・日・時・分・秒 */
+    const DATE_TIME = /(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/;
+
     /**
      * URL から画像のファイル名を取り出す。投稿の画像でなければ null。
      *
@@ -78,19 +81,6 @@
     };
 
     /**
-     * 文字を取り出す。改行は <br> で書かれているので、改行文字に戻してから文字だけを取り出します。
-     *
-     * @param {Element|null} el
-     * @returns {string}
-     */
-    const textOf = (el) => {
-        if (!el) return "";
-        const copy = el.cloneNode(true);
-        for (const br of copy.querySelectorAll("br")) br.replaceWith("\n");
-        return copy.textContent?.trim() ?? "";
-    };
-
-    /**
      * 投稿者のプロフィール欄へのリンク（/u/{ユーザー名}）。
      * 右の列のプロフィール欄を優先し、無ければ左の列の「Posted by」（スマホ表示用）を使います。
      *
@@ -106,11 +96,7 @@
      * @param {Element} root
      * @returns {string|null} ISO 8601（+09:00 付き）。見つからなければ null
      */
-    const readTime = (root) => {
-        const text = root.querySelector(".fa-clock")?.parentElement?.textContent ?? "";
-        const m = /(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/.exec(text);
-        return m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}+09:00` : null;
-    };
+    const readTime = (root) => SMDCore.jstTime(DATE_TIME.exec(root.querySelector(".fa-clock")?.parentElement?.textContent ?? ""));
 
     /**
      * 投稿情報をすべて読む（アダプタの readPost）。保存するときだけ呼ばれます。
@@ -118,6 +104,7 @@
      *   - 本文（{text}）は、文章の投稿ならタイトル、画像の投稿なら画像に添えられた文章です
      *     （文章の投稿の本文は長すぎてファイル名に向かないため）
      *   - 表示名（{name}）は、右の列のプロフィール欄にある名前です
+     *   - 改行は <br> で書かれているので、SMDCore.textOf で改行文字に戻してから読みます
      *
      * @param {Element} root
      * @returns {object|null}
@@ -133,32 +120,22 @@
 
         return {
             site: "privatter",
-            screenName: decodeURIComponent(user),
+            screenName: SMDCore.decode(user),
             postId: POST_ID,
-            name: textOf(name),
-            text: textOf(title) || textOf(caption),
+            name: SMDCore.textOf(name),
+            text: SMDCore.textOf(title) || SMDCore.textOf(caption),
             time: readTime(root),
         };
     };
 
     /**
      * メディア一覧（アダプタの getMedia）。並びは画面（DOM）と同じです。
+     * 拡張子と {media_id} はファイル名から決めます。
      *
      * @param {Element} root
      * @returns {Promise<object[]>}
      */
-    const getMedia = async (root) => images(root).map(({ file }) => {
-        const dot = file.lastIndexOf(".");
-        const ext = dot > 0 ? file.slice(dot + 1).toLowerCase() : "jpg";
-
-        return {
-            kind: "photo",
-            url: ORIGINAL + file,
-            ext: ext === "jpeg" ? "jpg" : ext,
-            id: dot > 0 ? file.slice(0, dot) : file,
-            res: "",
-        };
-    });
+    const getMedia = async (root) => images(root).map(({ file }) => SMDCore.photoOf(ORIGINAL + file, file));
 
     SMDCore.start({
         site: "privatter",

@@ -4,7 +4,7 @@
 
 > **The media is already on your screen. This puts a save button next to it.**
 
-**SNS Media Downloader** is a browser extension for **X (Twitter)**, **Bluesky**, **Poipiku**, **Privatter** and **Privatter+**.
+**SNS Media Downloader** is a browser extension for **X (Twitter)**, **Bluesky**, **Poipiku**, **Privatter**, **Privatter+**, **Skeb** and **Niconico Seiga** (including Niconico Manga).
 
 It adds a download button to the action bar of every post that has media, and saves the
 **original** files — full-resolution images, the highest-bitrate video — straight to your
@@ -29,21 +29,24 @@ Saving one image from a post is a right-click away. Everything past that gets te
 
 ## ✨ Features
 
-* 🐦 **Five sites** — X (Twitter), Bluesky, Poipiku, Privatter and Privatter+, each with its own adapter and accent colour.
+* 🐦 **Seven sites** — X (Twitter), Bluesky, Poipiku, Privatter, Privatter+, Skeb and Niconico Seiga (with Niconico Manga), each with its own adapter and accent colour.
 * 🖼️ **Originals, not previews** — `name=orig` for X images, the highest-bitrate MP4 variant for
   video, `com.atproto.sync.getBlob` straight from the author's PDS for Bluesky, and the signed
   full-size URL the page itself uses for Poipiku, and the full-size link already on the page for Privatter and Privatter+.
+  On Skeb, the images, videos and audio shown on a work's page are saved exactly as shown (see
+  "Skeb: what gets saved" below). On Niconico Seiga, an illustration's full-size image behind "原寸大で見る"
+  (view full size); on Niconico Manga, the page images as shown.
 * 🎯 **Whole post or one item** — the action-bar button saves everything; a small button on each
   thumbnail saves just that one (it appears once a post has two or more).
 * ❤️ **Save when you like** — optionally, liking a post (sending an emoji reaction, on Poipiku;
-  picking a reaction icon from ♡いいね, on Privatter; picking a reaction, on Privatter+)
+  picking a reaction icon from ♡いいね, on Privatter; picking a reaction, on Privatter+; adding to a clip folder, on Niconico Seiga)
   saves its media at the same time.
   **Off by default**; turn it on in settings when you want it.
 * 📊 **Progress and saved state at a glance** — a counter in the bottom-left corner shows
   *Pending* and *Done* (and *Failed*, if anything failed). Buttons for media you've saved turn into
   a green check mark, and stay that way across page changes and reloads until you close the browser.
 * 🏷️ **Filename templates** — 24 placeholders, subfolders, conditional blocks, per-variable length
-  limits, and a live preview of seven sample posts while you type.
+  limits, and a live preview of nine sample posts while you type.
 * 🔁 **Failed transfers are retried** — up to three times, with a growing pause between attempts.
   Anything that still won't come down is reported as an error and cleared away, rather than left in
   your download folder as a broken file.
@@ -95,7 +98,10 @@ it appears next to the share / bookmark buttons of each post, on a post's own pa
 こそフォロ (secret-follow) and フォロータグ (followed-tags) lists. On [privatter.net](https://privatter.net/)
 it appears after the お気に入り / いいね / Share row of an image post (`/i/…`) or a text post with
 images in it (`/p/…`). On [privatter.me](https://privatter.me/) (Privatter+) it appears right after the
-リアクション / コメント (reactions / comments) tabs under a post (`/page/…`). Click it, and a counter appears
+リアクション / コメント (reactions / comments) tabs under a post (`/page/…`). On [skeb.jp](https://skeb.jp/) it
+appears at the top right of a work's page (`/@{creator}/works/{number}`), after the シェア (share) buttons. On
+[Niconico Seiga](https://seiga.nicovideo.jp/) illustrations (`/seiga/im…`) and [Niconico Manga](https://manga.nicovideo.jp/)
+episodes (`/watch/mg…`) it appears right after the post date at the top. Click it, and a counter appears
 in the bottom-left corner; once the save finishes, the button turns into a green check mark.
 
 ---
@@ -106,7 +112,7 @@ in the bottom-left corner; once the save finishes, the button turns into a green
 | :--- | :--- | :--- |
 | **Main button** | In the action bar, next to like / bookmark. Shows a small count badge when the post has more than one media item. | Every media item in the post |
 | **Item button** | Top-right corner of each thumbnail. Only appears when the post has **two or more** items. | That one item |
-| **The like button** | The site's own like button (on Poipiku, any emoji reaction button; on Privatter, any reaction icon under ♡いいね; on Privatter+, any icon in the reaction picker) — only when you switch this on in settings. | Every media item in the post |
+| **The like button** | The site's own like button (on Poipiku, any emoji reaction button; on Privatter, any reaction icon under ♡いいね; on Privatter+, any icon in the reaction picker; on Niconico Seiga, the button that adds an illustration to a clip folder) — only when you switch this on in settings. | Every media item in the post |
 
 ### The download counter
 
@@ -163,7 +169,12 @@ than one you have to click for. A few details worth knowing:
   send counts as a like. On Privatter, picking any reaction icon (heart, paw, face…) from the panel
   that ♡いいね opens counts as a like; opening the panel itself doesn't, and neither does ★お気に入り.
   On Privatter+, picking any icon in the reaction picker counts as a like. Clicking a reaction that's
-  already been sent (which cancels it on Privatter+) and the bookmark button don't.
+  already been sent (which cancels it on Privatter+) and the bookmark button don't. Skeb has no like
+  button, so this setting does nothing there — use the download button. On Niconico Seiga, adding an
+  illustration to a clip folder (the "○○に追加" button) counts as a like; that button looks the same
+  after you press it, so every press counts, but an illustration that's already saved isn't saved again.
+  While you have no clip folder yet (the button reads "作成", create), it doesn't count. Niconico Manga's
+  お気に入り (favourite) applies to a whole series, not an episode, so it isn't linked.
 * **Text-only posts are ignored silently.** No toast, no error. Nothing happens at all.
 * **A like never re-saves something already saved.** Like → unlike → like again produces one set
   of files, not two. The same goes for a post you saved with a button: if every item is saved, a
@@ -179,8 +190,9 @@ than one you have to click for. A few details worth knowing:
   excluded on both sites. Open the quoted post itself and it gets its own button.
 * **Link-card previews** (`card.*` on X, `<a href="http…">` thumbnails on Bluesky).
 * **External GIF embeds** such as Tenor — they aren't hosted by the site.
-* **The lightbox.** No buttons are injected into the full-screen image viewer; use the buttons
-  on the post itself.
+* **The lightbox, except on X.** No buttons are injected into the full-screen image viewers of the
+  other sites; use the buttons on the post itself. X's viewer gets only the main button (save every
+  item) under the image — no per-item buttons, since it shows one item at a time.
 * Avatars, banners, and anything that isn't post media.
 * **On Poipiku: anything you haven't unlocked.** Password, follower-only, age-gated and warning
   posts only get buttons for the images you can already see. The extension never enters a password
@@ -194,6 +206,16 @@ than one you have to click for. A few details worth knowing:
   posts (`/i/…`) and text posts (`/p/…`), not on user pages (`/u/…`) or other lists. Privatter+ works the
   same way: a password-protected post gets buttons once you've entered the password and the page has
   reloaded, and buttons appear only on posts (`/page/…`), not on user pages (`/user/…`) or other lists.
+* **On Skeb: originals and unwatermarked images.** Skeb's image, video and audio URLs are signed, so only
+  what the page shows can be fetched — for images, usually an 800px-wide WebP — and when you're neither
+  the client nor the creator, it still carries the "SAMPLE" watermark. The extension never removes the
+  watermark or goes after the delivered originals (PSD files and the like). Videos and audio are saved in
+  the format the page plays (MP4, MP3 and so on). Buttons appear only on a work's page, not on creator
+  pages, search results or other lists.
+* **On Niconico: manga originals, and the lists.** On Niconico Manga, what's saved is the page image as
+  shown (WebP). An illustration's full-size image on Niconico Seiga can only be fetched while you're signed
+  in. Buttons appear only on illustration pages (`/seiga/im…`) and manga episode pages (`/watch/mg…`), not
+  on user pages or lists.
 
 ---
 
@@ -211,7 +233,7 @@ which produces, for the second image of a four-image X post:
 x/example_user-1234567890123456789-20260819_142530-img2.jpg
 ```
 
-Open the settings popup and the seven sample previews update as you type, so you never have to
+Open the settings popup and the nine sample previews update as you type, so you never have to
 save a file to find out what the template does.
 
 ### Placeholders
@@ -220,11 +242,11 @@ save a file to find out what the template does.
 
 | Placeholder | Value |
 | :--- | :--- |
-| `{site}` | `x`, `bsky`, `poipiku`, `privatter` or `privatterplus` |
-| `{user}` | Screen name (X), handle (Bluesky), numeric user ID (Poipiku) or user name (Privatter, Privatter+) |
+| `{site}` | `x`, `bsky`, `poipiku`, `privatter`, `privatterplus`, `skeb` or `niconico` |
+| `{user}` | Screen name (X), handle (Bluesky), numeric user ID (Poipiku), user name (Privatter, Privatter+), the creator's user name (Skeb — not the client's) or the numeric user ID of the poster or author (Niconico) |
 | `{name}` | Display name |
-| `{id}` | Post ID. On Privatter, the post type plus its number — `i7962168` for an image post, `p12082367` for a text post (the two are numbered separately). On Privatter+, the post's ID from its URL (`6975d5e22c2c3`) |
-| `{text}` | Post body, with URLs removed. On Privatter, the caption of an image post, or the title of a text post. On Privatter+, the post's title |
+| `{id}` | Post ID. On Privatter, the post type plus its number — `i7962168` for an image post, `p12082367` for a text post (the two are numbered separately). On Privatter+, the post's ID from its URL (`6975d5e22c2c3`). On Skeb, the work number (`12` in `/works/12`). On Niconico, the work ID with its prefix (`im10935628`, `mg821133`) |
+| `{text}` | Post body, with URLs removed. On Privatter, the caption of an image post, or the title of a text post. On Privatter+, the post's title. On Skeb, the request text (the translation if one is shown first). On Niconico Seiga, the illustration's title; on Niconico Manga, "series title episode title" |
 
 **Date & time** — the post's own timestamp, converted to your local timezone. Poipiku pages don't
 show when a post was made, so these are empty there (wrap them in `[ ]`, or use `{dl_datetime}`).
@@ -249,8 +271,8 @@ Privatter and Privatter+ show the time in Japan time, and it is read as such
 | `{total}` | How many items the post has |
 | `{kind}` | `img` / `vid` / `gif` |
 | `{ext}` | `jpg`, `png`, `mp4`, `webm` … |
-| `{media_id}` | The original file's ID — the CID on Bluesky, the media hash on X, the file name on Poipiku, Privatter and Privatter+ |
-| `{res}` | `1280x720` for X video, the aspect ratio for Bluesky, `orig` for X images (empty on Poipiku, Privatter and Privatter+) |
+| `{media_id}` | The original file's ID — the CID on Bluesky, the media hash on X, the file name on Poipiku, Privatter and Privatter+, the file's ID (a UUID) on Skeb, the illustration number on Niconico Seiga, the page image's number on Niconico Manga |
+| `{res}` | `1280x720` for X video, the aspect ratio for Bluesky, `orig` for X images, the loaded size for Skeb images and Niconico Manga pages (empty on Niconico Seiga illustrations, Poipiku, Privatter and Privatter+) |
 
 ### Syntax
 
@@ -267,20 +289,28 @@ dangling hyphen behind.
 
 ### Rules the renderer applies for you
 
-* Characters that filenames can't contain (`\ / : * ? " < > |` and control characters) are stripped
-  from **values**, so a display name full of emoji and slashes can't break out into a folder path.
+* Characters that filenames can't contain are stripped from **values**, so a display name full of
+  emoji and slashes can't break out into a folder path. That is `\ / : * ? " < > |`, control
+  characters, and the invisible *format* characters Chrome and Firefox refuse to save under:
+  zero-width joiners and spaces, direction marks, soft hyphens, byte-order marks and tag characters.
+  The zero-width joiner sits inside joined emoji, so `👨‍💻` comes out as `👨💻` — leaving it in
+  would make the browser reject the whole download.
 * The same characters are also stripped if you typed them into the template itself (a literal `:`
   or `?`, say), so the browser never rejects the name.
-* Runs of whitespace collapse to a single space, and leading/trailing spaces are trimmed.
+* Runs of whitespace — line breaks and tabs included — collapse to a single space, and
+  leading/trailing spaces are trimmed.
 * Length limits (`:20` and so on) count *visible characters*, so even joined emoji like `👨‍👩‍👧`
   are never cut in half.
-* Each path segment has leading and trailing dots and spaces removed, and empty segments are
-  dropped — which also means `..` can never survive into the path.
+* Each path segment has leading and trailing dots, spaces and `~` removed (Chrome refuses a `~` at
+  either end of a folder or file name), and empty segments are dropped — which also means `..`
+  can never survive into the path.
 * Each segment — folder or file name — is capped at **150 bytes** of UTF-8: roughly 150 Latin
   characters, or about 50 Japanese ones. File names are trimmed from the stem so the extension
   survives. Most file systems allow 255 bytes; the rest is headroom for the temporary suffix the
   browser adds while downloading.
-* A segment that turns out to be a reserved Windows name (`CON`, `NUL`, `COM1` …) gets a `_` prefix.
+* A segment that turns out to be a reserved Windows name (`CON`, `NUL`, `COM1`, `CLOCK$` …) or
+  `desktop.ini` / `Thumbs.db` gets a `_` prefix, and one ending in an extension the browsers refuse
+  (`.lnk`, `.local`, `.url`, `.scf`, `.desktop`) gets a `_` suffix.
 * If the file-name part renders to nothing, the file is saved as `download`.
 * If the template itself is blank (or only spaces), the default template is used instead.
 * A name that isn't in the placeholder list, such as `{toString}`, renders as nothing (and the
@@ -313,9 +343,10 @@ the browser.
 
 ## 💡 How it works
 
-Every site goes through the same core (`shared/core.js`): find posts, inject buttons, build
-filenames, hand a list of `{url, filename}` pairs to the background script, update the counter
-and the buttons' saved state, and show a toast if something failed.
+Every site goes through the same core (`shared/core.js`): find posts, inject buttons, hand the
+post and its list of media to the background script — which builds each filename from your
+template with the same code the settings page previews with, and queues the downloads — update the
+counter and the buttons' saved state, and show a toast if something failed.
 Everything site-specific lives in an adapter. The adapters solve very different problems.
 
 ### X — reading the response the page already received
@@ -429,6 +460,46 @@ the リアクション / コメント tabs under the post, because the share-but
 some posts; a post without the tabs falls back to the share row, then to the date box. The button is
 centred in the row, and its padding isn't counted towards the row's height, so nothing below shifts.
 
+### Skeb — what's shown, signature and all
+
+Skeb (`skeb.jp`) is a single-page app: it switches screens without reloading. So the adapter is loaded
+on every skeb.jp page and adds buttons only while a work's page (`/@{creator}/works/{number}`) is shown.
+Which work it is gets read again on every redraw — from the share buttons' links on screen, or from the
+address bar if there are none — rather than once at load.
+
+A work's media sit one per box in the left column (`.image-column`). Images are `/uploads/origins/{ID}`
+on `si.imgix.net`; videos and audio are `/uploads/outputs/{ID}` on `fcdn.skeb.jp`, from the `<source>`
+inside the player. Both are signed, and changing even one character of the query breaks them, so the
+URL on the page is saved as it is. There's an API for a work's details, but it needs the page's own
+credentials, so it isn't used. The extension comes from imgix's `fm` for images (usually `webp`) and from
+the `<source>`'s `type` for videos and audio (`video/mp4` → `mp4`, `audio/mp3` → `mp3`, …); audio's
+`{kind}` is `aud`.
+
+Work numbers count up per creator, so the saved-state record uses "user name/work number"
+(`skeb:example_user/12`) while `{id}` gets the work number alone. The page shows no delivery date, so
+the date placeholders are empty. The main button goes after the round シェア (share) buttons in the
+right column.
+
+### Niconico Seiga and Niconico Manga — the full size is behind "view full size"
+
+The image on a Niconico Seiga illustration page (`seiga.nicovideo.jp/seiga/im{number}`) is a reduced copy
+(`lohas.nicoseiga.jp/thumb/{number}i`). The full-size URL (`lohas.nicoseiga.jp/priv/{signature}/{expiry}/{number}`)
+is minted on demand and isn't on the page. The page's 原寸大で見る link (`/image/source/{number}`) redirects a
+signed-in user to the full-size page (`lohas.nicoseiga.jp/o/{signature}/{expiry}/{number}`), whose image is the
+full-size one. So when you save, the background opens that same link (the browser attaches your Niconico
+sign-in cookie) and picks out the full-size URL. The content script can't, because the redirect goes to
+another host and the page isn't allowed to read the reply (CORS). The URL doesn't reveal the file type, so a
+`HEAD` request asks for just that.
+
+On a Niconico Manga episode page (`manga.nicovideo.jp/watch/mg{number}`), each page image
+(`deliver.cdn.nicomanga.jp/thumb/{…}.webp`, held in `data-original` until it lazy-loads) is signed, so the URL
+on the page is saved as it is. The author comes from the author link under 作品情報 (`/manga/list?user_id=…`).
+
+`{id}` keeps the `im` / `mg` prefix, because illustrations and manga are numbered separately. The post date is
+read as Japan time. The main button goes right after the post date at the top. Save-on-like follows the
+illustration's "add to clip folder" button (`#ko_clip button.add_clip_button`); since that button never
+changes its look, it only counts while the clip-folder list has an entry (the button reads "○○に追加").
+
 ### Injecting the buttons
 
 X and Bluesky replace their timelines continuously as you scroll, so there's no load event to hook.
@@ -506,7 +577,7 @@ left off whenever it's woken**:
 Saves run **one at a time**, even across posts. Parallel transfers fail more often, and with
 *Always show the save dialog* on they'd open a stack of dialogs at once. The background script also
 checks every URL and file name itself: nothing but X's media hosts, Bluesky's `getBlob` and
-Poipiku's `cdn.poipiku.com` and Privatter's `img_original` path on its CloudFront host and Privatter+'s `/img/{user number}/original/` path on `media.privatter.me` are downloaded, and nothing is written outside the downloads folder. Anything rejected counts as failed.
+Poipiku's `cdn.poipiku.com` and Privatter's `img_original` path on its CloudFront host and Privatter+'s `/img/{user number}/original/` path on `media.privatter.me` and Skeb's `/uploads/origins/` on `si.imgix.net` and `/uploads/outputs/` on `fcdn.skeb.jp` and Niconico's `/priv/` on `lohas.nicoseiga.jp` and `/thumb/{…}.webp` on `deliver.cdn.nicomanga.jp` are downloaded, and nothing is written outside the downloads folder. Anything rejected counts as failed.
 
 Failures are retried — three times, waiting 0.3 s, then 0.8 s, then 1.5 s. Interruption reasons that
 can't change on a second attempt (a 404, a 403, no disk space, and so on) skip the retries and fail
@@ -519,7 +590,7 @@ a failure: it isn't added to *Failed*, and no toast appears.
 ### The counter and the saved-media record
 
 The counter is stored in `storage.session` alongside the queue, and every time a file changes
-state the background sends an `smdUpdate` message to every open X / Bluesky / Poipiku / Privatter / Privatter+ tab (a file that was
+state the background sends an `smdUpdate` message to every open X / Bluesky / Poipiku / Privatter / Privatter+ / Skeb / Niconico tab (a file that was
 just saved rides along in the same message, halving the number of messages). Because it's saved
 with the queue, the numbers stay right even if the background script is stopped and restarted. The
 background also decides *when* the counter should disappear (`hideAt`) and sends that along, so every
@@ -532,7 +603,7 @@ saved is `4 × 2³² + 0b101`. That's much lighter than an object or array per p
 messages and in writes (and it's why only posts with up to 32 media items are recorded; X and
 Bluesky both stop at four). A Poipiku post with more than 32 images still saves normally, it just
 never shows the saved state — and for the same reason, reacting to it again saves it again. It's capped at 3000 posts, oldest dropped first. A tab that has just
-loaded sends `smdState` to receive the current record and counter.
+loaded sends `smdState` to receive the current counter and the part of the record for its own site.
 
 X sometimes reuses a post's elements to show a different post. Link `href` changes are watched too,
 so the buttons are repainted when that happens. When a file is saved, only the places showing that
@@ -541,7 +612,9 @@ post are repainted.
 Normal and private windows share the same background script, so both the counter and the record
 are kept per the sending tab's `incognito` flag. Because `storage.session` survives until the whole
 browser closes, the private-window record is dropped from a `windows.onRemoved` listener as soon as
-no private windows remain.
+no private windows remain. In Firefox, a save requested from a private window is also started as a
+private download (`downloads.download({ incognito: true })`), so it stays out of the normal download
+history; Chrome has no such option.
 
 ---
 
@@ -550,7 +623,7 @@ no private windows remain.
 **No button appears on a post.**
 The post has no media the extension recognises — link-card previews, Tenor GIFs and quoted media
 are excluded on purpose. If the timeline was mid-render, scrolling away and back re-triggers the
-scan. Buttons are never injected into the full-screen lightbox.
+scan. Full-screen lightboxes get no buttons, except X's, which gets the main button only.
 
 **Liking a post doesn't download anything.**
 Check the setting is on — it ships off. Then check the post actually has media the extension
@@ -616,6 +689,15 @@ password or login-only post, enter the password or sign in first; the page reloa
 and the buttons appear. User pages (`/u/…`) and other lists get no buttons. On Privatter+, buttons
 appear only on posts (`/page/…`); for a password-protected post, enter the password first.
 
+**On Skeb: no button appears, or the image is watermarked.**
+Buttons only appear on a work's page (`/@…/works/…`). What gets saved is exactly the media the page
+shows, so unless you're the client or the creator it carries the "SAMPLE" watermark, and an image is the
+size it's shown at (usually 800px wide).
+
+**On Niconico Seiga: "couldn't get the media URL".**
+An illustration's full-size image can only be fetched while you're signed in to Niconico. Sign in and press
+the button again. Buttons only appear on illustration pages (`/seiga/im…`) and manga episode pages (`/watch/mg…`).
+
 **Settings reset themselves on another machine.**
 They're stored in `storage.sync` and follow your browser profile. If two devices disagree, the
 last write wins.
@@ -662,14 +744,15 @@ The extension asks for three permissions — `downloads` to save files (and to f
 completion, so failures can be retried and cleared away), `storage` to remember your four settings
 and, until the browser closes, which media you've saved and what's still queued, and `alarms` to
 check on a running download every 30 seconds — plus access to `x.com`, `twitter.com`, `bsky.app`,
-`public.api.bsky.app`, `plc.directory`, `poipiku.com`, `cdn.poipiku.com`, `privatter.net` and `privatter.me`.
+`public.api.bsky.app`, `plc.directory`, `poipiku.com`, `cdn.poipiku.com`, `privatter.net`, `privatter.me`, `skeb.jp`, `seiga.nicovideo.jp`, `manga.nicovideo.jp` and `lohas.nicoseiga.jp`.
 
 It does make network requests, and it's worth being precise about which: **only when a save is
 triggered** — by the download button, or by a like if you turned that on — and only to Bluesky's
 public API and the author's PDS, or, on Poipiku, to `poipiku.com` itself (the same request the page
-makes when you enlarge an image, sent with your Poipiku session) and its image server. On X, Privatter
-and Privatter+ it makes no requests of its own apart from the download itself — it reads what the page
-had already received (on Privatter and Privatter+, the image links on the page). Which media you've saved is recorded only on your device, in
+makes when you enlarge an image, sent with your Poipiku session) and its image server, or, for a
+Niconico Seiga illustration, to its 原寸大で見る link (`seiga.nicovideo.jp`, redirecting to `lohas.nicoseiga.jp`,
+sent with your Niconico session). On X, Privatter, Privatter+, Skeb and Niconico Manga it makes no requests of its own apart from the download itself — it reads what the page
+had already received (on Privatter and Privatter+, the image links on the page; on Skeb and Niconico Manga, the URLs of the media shown). Which media you've saved is recorded only on your device, in
 `storage.session`, for the saved-state buttons — never synced, never sent, and cleared when the
 browser closes. What you view and which posts you like aren't recorded at all (a save triggered by a
 like is remembered as a save, nothing more), and nothing about what you view or save is transmitted.
@@ -685,17 +768,19 @@ Full details in [PRIVACY.md](PRIVACY.md).
 manifest.json             Extension manifest (MV3) — loads as-is in both Chrome and Firefox
 manifest-chrome.json      Chrome-only version: minimum_chrome_version, service-worker background
 manifest-firefox.json     Firefox-only version: browser_specific_settings, event-page background
-background.js             Service worker: download queue (retries, resumes after being stopped), counter, saved-media record, Bluesky API, DID → PDS resolution, caching
+background.js             Service worker: filenames, download queue (retries, resumes after being stopped), counter, saved-media record, Bluesky API, DID → PDS resolution, caching
 popup.html/.css/.js       Settings UI (also serves as the options page)
 content.css               Button, toast and counter styles, injected into every site
-shared/template.js        SMD  — i18n, filename templates, defaults
-shared/core.js            SMDCore — button injection, save flow, toasts, counter, saved-state buttons
+shared/template.js        SMD  — settings, defaults, filename templates (used by the background and the settings page)
+shared/core.js            SMDCore — button injection, save flow, toasts, counter, saved-state buttons, helpers for adapters
 sites/x/interceptor.js    MAIN world: wraps fetch / XHR to harvest media URLs
 sites/x/content.js        X adapter
 sites/bluesky/content.js  Bluesky adapter
 sites/poipiku/content.js  Poipiku adapter
 sites/privatter/content.js  Privatter adapter
 sites/privatterplus/content.js  Privatter+ adapter
+sites/skeb/content.js     Skeb adapter
+sites/niconico/content.js Niconico Seiga / Niconico Manga adapter
 _locales/                 UI translations for 9 languages
 icons/
 ```
@@ -705,7 +790,7 @@ icons/
 
 | Key | Role |
 | :--- | :--- |
-| `site` | `"x"` / `"bluesky"` / `"poipiku"` / `"privatter"` / `"privatterplus"`. Selects the CSS accent colour via `<html data-smd-site>` |
+| `site` | `"x"` / `"bluesky"` / `"poipiku"` / `"privatter"` / `"privatterplus"` / `"skeb"` / `"niconico"`. Selects the CSS accent colour via `<html data-smd-site>` |
 | `postRoot` | Selector matching the container of a single post |
 | `mediaContainers(root)` | The elements wrapping each media item |
 | `postId(root)` | Just the post ID (or `null`), quickly. Called every time the buttons are repainted, so keep it light |
@@ -721,7 +806,10 @@ icons/
 Write an adapter with those keys, add its content-script entry (and any `host_permissions`)
 to all three manifests, add the site to the `SITE` map in `shared/template.js` so `{site}` renders
 sensibly, and add an accent-colour block to `content.css`. `shared/core.js` shouldn't need to
-change.
+change. It also offers a few small helpers that adapters tend to need: `SMDCore.decode()` (URL
+decoding that never throws), `SMDCore.textOf()` (an element's text with `<br>` turned into line
+breaks), `SMDCore.jstTime()` (a Japan-time date match → ISO 8601) and `SMDCore.photoOf()` (a media
+item built from an image's file name).
 
 ### Debugging
 

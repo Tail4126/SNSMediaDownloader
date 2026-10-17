@@ -5,15 +5,21 @@
  * サイトに依存しない共通処理（globalThis.SMDCore）。
  *
  * 各サイト用のスクリプトは「アダプタ」を 1 つ作って SMDCore.start() に渡すだけです。
- * ボタンの描画、保存の流れ、エラー通知（トースト）、いいね連動保存、
+ * ボタンの描画、保存の依頼、エラー通知（トースト）、いいね連動保存、
  * ダウンロード数カウンター、保存済みボタンの表示は、すべてこのファイルが引き受けます。
+ * どのアダプタでも同じになる小さな処理（URL の一部のデコード、<br> を改行に戻して文字を読む、
+ * 日本時間の日時の変換、画像のファイル名からメディアの情報を作る）も、ここに置いて共有します。
  *
  * 【保存の流れ】
  *   1. ボタン（またはいいね）が押される
- *   2. アダプタから投稿情報とメディア一覧をもらい、ファイル名を組み立てる
- *   3. background.js へ「この一覧を保存して」と頼む。background はすぐに受け付けだけ返す
+ *   2. アダプタから投稿情報とメディア一覧をもらう
+ *   3. background.js へ「この投稿の、このメディアを保存して」と頼む。保存先のファイル名は、
+ *      background が設定のテンプレートから組み立てる。background はすぐに受け付けだけ返す
  *   4. 進み具合は smdUpdate（カウンターと、保存できた 1 件）で全タブへ届く
  *   5. 頼んだ分がすべて終わると smdBatch が届き、ボタンの「保存中」を解いて、失敗があれば知らせる
+ *
+ * ファイル名を組み立てる shared/template.js は、このファイルからは使いません。ページを開くたびに
+ * 読み込むスクリプトを減らすためと、保存先を決める処理をすべて background の 1 か所にまとめるためです。
  *
  * 【速さのための工夫】
  * X も Bluesky も DOM が絶えず変わるので、ボタンの差し込みは次のようにして軽くしています。
@@ -25,7 +31,7 @@
  *   - ボタンに関係しない変化（動画の再生時間の表示など）は、見直しの対象にしない
  *   - DOM の変化を受け取る処理は、ページのあらゆる変化で呼ばれるので、できるだけ少ない手数で見送る
  *   - クリックの受け取りは document の 1 か所にまとめ、ボタンごとにリスナーを付けない
- *   - アイコンは 1 度だけ作って複製する（毎回 HTML として解析しない）
+ *   - アイコンは content.css が描く（ボタンの中に SVG などの要素を作らないので、ボタン 1 個が要素 1 個で済む）
  * ==================================================================
  */
 
@@ -34,9 +40,12 @@ globalThis.SMDCore = (() => {
 
     /**
      * @typedef {object} PostInfo 投稿 1 件の情報
-     * @property {"x"|"bluesky"|"poipiku"|"privatter"|"privatterplus"} site - サイト
+     * @property {"x"|"bluesky"|"poipiku"|"privatter"|"privatterplus"|"skeb"|"niconico"} site - サイト
      * @property {string} screenName - ユーザー名 / ハンドル
-     * @property {string} postId - 投稿 ID
+     * @property {string} postId - 投稿 ID（ファイル名の {id} に使う）
+     * @property {string} [recordId] - 保存済みの記録に使う ID。省略すると postId を使う。
+     *   投稿 ID がサイト全体では重ならないとは限らないとき（Skeb の作品番号はクリエイターごとの連番）に、
+     *   重ならない ID を別に渡すためのものです。アダプタの postId() が返す値と同じにすること
      * @property {string} name - 表示名
      * @property {string} text - 本文
      * @property {string|null} time - 投稿日時（ISO 8601）
@@ -44,7 +53,7 @@ globalThis.SMDCore = (() => {
 
     /**
      * @typedef {object} MediaItem メディア 1 件の情報
-     * @property {"photo"|"video"|"animated_gif"} kind - 種類
+     * @property {"photo"|"video"|"animated_gif"|"audio"} kind - 種類
      * @property {string} url - ダウンロード元（https のみ）
      * @property {string} ext - 拡張子
      * @property {string} [id] - 元ファイルの ID（Bluesky の CID など）
@@ -53,11 +62,11 @@ globalThis.SMDCore = (() => {
 
     /**
      * @typedef {object} SiteAdapter サイトごとの差分を吸収するオブジェクト
-     * @property {"x"|"bluesky"|"poipiku"|"privatter"|"privatterplus"} site - サイト。保存済みの記録のキーと、CSS のアクセント色の切り替えに使う
+     * @property {"x"|"bluesky"|"poipiku"|"privatter"|"privatterplus"|"skeb"|"niconico"} site - サイト。保存済みの記録のキーと、CSS のアクセント色の切り替えに使う
      * @property {string} postRoot - 投稿 1 件のコンテナを選ぶ CSS セレクタ
      * @property {(root: Element) => Element[]} mediaContainers - メディアを包む要素（画面の並び順）
      * @property {(root: Element) => string|null} postId
-     *   投稿 ID だけを素早く読む。ボタンの描き分けのたびに呼ぶので、軽く作ること
+     *   投稿 ID（readPost が recordId を返すなら、その値）だけを素早く読む。ボタンの描き分けのたびに呼ぶので、軽く作ること
      * @property {(root: Element) => PostInfo|null} readPost
      *   投稿情報をすべて読む（本文など重いものも含む）。保存するときだけ呼ばれる
      * @property {(root: Element, post: PostInfo) => Promise<(MediaItem|null)[]>} getMedia
@@ -72,47 +81,150 @@ globalThis.SMDCore = (() => {
      * @property {(root: Element) => boolean} [isLocked] - メディアはあるが、まだ表示されていない（パスワードや
      *   注意書きで隠れている）投稿か。true の投稿には、メディアが 0 件でもメインボタンを出し、押されたら
      *   先に解除するよう知らせます。省略すると、メディアが 0 件の投稿にはボタンを出しません
+     * @property {(root: Element) => number} [mediaCount] - 画面に出ている数とは別に分かっている、メディアの総数。
+     *   画像の拡大表示のように、一度に 1 件しか表示しないところで、枚数バッジと「全件保存済みか」の判断に使います
+     *   （画面上の数より小さい値は無視します）。省略すると、画面上の数（mediaContainers の件数）を使います
+     * @property {(like: Element) => Element|null} [likeRoot] - 押された「いいね」ボタンが、どの投稿のものか。
+     *   ボタンのある投稿のコンテナとは別の要素（同じ投稿の拡大表示など）で保存したいときに使います。
+     *   省略すると、ボタンを囲む postRoot を使います
      */
 
-    // 下向き矢印（保存）とチェックマーク（保存済み）のアイコン。
-    // fill="currentColor" なので、CSS の color で色が変わります。
-    const ICON =
-        '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" ' +
-        'd="M12 3a1 1 0 0 1 1 1v8.59l2.3-2.3a1 1 0 1 1 1.4 1.42l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 ' +
-        '1.4-1.42l2.3 2.3V4a1 1 0 0 1 1-1zM5 18a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1z"/></svg>';
-    const CHECK =
-        '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" ' +
-        'd="M9.5 12.09 6.7 9.3a1 1 0 0 0-1.4 1.4l3.5 3.5a1 1 0 0 0 1.4 0l8.5-8.5a1 1 0 0 0-1.4-1.4z' +
-        'M5 18a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1z"/></svg>';
+    // ================================================================
+    // 翻訳文字列
+    // ================================================================
 
     /**
-     * アイコンの元（1 度だけ作る）。ボタンを描き直すたびに SVG を HTML として解析するのは重いので、
-     * 元を複製して使います。
-     * @type {{icon?: Node, check?: Node}}
+     * 差し込む値の無いメッセージの覚え。
+     * 拡張機能を更新・再読み込みすると、開いたままのページに残った content script からは
+     * chrome.i18n が使えなくなり（Extension context invalidated の例外）、エラーを知らせる文言すら
+     * 取り出せなくなります。一度取り出した文言はここに残しておき、そのときも使えるようにします。
+     * @type {Map<string, string>}
      */
-    const iconSources = {};
+    const messages = new Map();
 
     /**
-     * アイコンの複製を返す。
+     * _locales/<言語>/messages.json から翻訳済みの文字列を取り出す。
      *
-     * @param {boolean} done - 保存済みならチェックマーク、そうでなければ矢印
-     * @returns {Node}
+     * @param {string} key - メッセージのキー
+     * @param {...unknown} subs - $1, $2 ... に差し込む値
+     * @returns {string} 見つからなければ（取り出せなければ）key をそのまま返す
      */
-    const iconOf = (done) => {
-        const name = done ? "check" : "icon";
-        if (!iconSources[name]) {
-            const template = document.createElement("template");
-            template.innerHTML = done ? CHECK : ICON; // 自前の固定文字列なので、HTML として解釈しても安全
-            iconSources[name] = template.content.firstChild;
+    const t = (key, ...subs) => {
+        if (subs.length === 0 && messages.has(key)) return messages.get(key);
+
+        let text;
+        try {
+            text = chrome.i18n.getMessage(key, subs.map(String)) || key;
+        } catch {
+            return key;
         }
-        return iconSources[name].cloneNode(true);
+        if (subs.length === 0) messages.set(key, text);
+        return text;
     };
+
+    // ================================================================
+    // アダプタが使う小さな道具
+    // ================================================================
+
+    /**
+     * URL の一部を安全にデコードする。壊れた「%」があっても例外を投げず、元の文字列を返します
+     * （例外になると、ボタンの描き分けが止まったり、保存のたびに見当違いの知らせが出たりするため）。
+     *
+     * @param {string} s
+     * @returns {string}
+     */
+    const decode = (s) => {
+        try {
+            return decodeURIComponent(s);
+        } catch {
+            return s;
+        }
+    };
+
+    /**
+     * 要素の文字を取り出す。改行が <br> で書かれているページ向けに、<br> を改行文字に戻してから読みます
+     * （そのまま textContent で読むと、改行の前後の単語がくっついてしまうため）。
+     * ページの要素を書き換えないよう、複製してから置き換えます。保存するときにしか呼ばれません。
+     *
+     * @param {Element|null|undefined} el
+     * @returns {string} 前後の空白を除いた文字。要素が無ければ空文字
+     */
+    const textOf = (el) => {
+        if (!el) return "";
+        const copy = el.cloneNode(true);
+        for (const br of copy.querySelectorAll("br")) br.replaceWith("\n");
+        return copy.textContent.trim();
+    };
+
+    /**
+     * 日本時間で書かれた日時を、ISO 8601 の文字列（+09:00 付き）にする。
+     *
+     * @param {RegExpExecArray|null} m - 日時を読んだ正規表現の結果。[1]〜[6] が年・月・日・時・分・秒の数字
+     *   （秒の無い表記なら [6] は無くてよい）
+     * @returns {string|null} 読めていなければ null
+     */
+    const jstTime = (m) => (m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6] ?? "00"}+09:00` : null);
+
+    /**
+     * 画像のファイル名から、メディア 1 件の情報を作る。
+     * 拡張子はファイル名の最後の「.」より後ろ（無ければ jpg、jpeg は jpg にそろえます）、
+     * ファイルの ID（{media_id}）は、ファイル名から拡張子を除いたものです。
+     *
+     * @param {string} url - ダウンロード元
+     * @param {string} file - ファイル名（例: "20758042846ac9137a5788c.jpg"）
+     * @returns {MediaItem}
+     */
+    const photoOf = (url, file) => {
+        const dot = file.lastIndexOf(".");
+        const ext = dot > 0 ? file.slice(dot + 1).toLowerCase() : "jpg";
+        return { kind: "photo", url, ext: ext === "jpeg" ? "jpg" : ext, id: dot > 0 ? file.slice(0, dot) : file, res: "" };
+    };
+
+    // ================================================================
+    // ページに置く要素
+    // ================================================================
 
     /** この拡張機能が作るボタンを選ぶセレクタ */
     const BUTTONS = ".smd-button, .smd-item-button";
 
-    /** この拡張機能が作る要素（ボタン・カウンター・トースト）を選ぶセレクタ */
-    const OWN = `${BUTTONS}, .smd-counter, .smd-toast`;
+    /**
+     * この拡張機能（のこの起動）が作った要素（ボタン・カウンター・トースト）。
+     * DOM の変化のうち、自分で起こしたものを見分けるのに使います。
+     *
+     * ページのあらゆる変化で調べるので、要素をセレクタと照らし合わせる（matches()）代わりに、
+     * 作ったときにここへ入れておき、入っているかどうかだけを見ます。WeakSet なので、
+     * 要素がページから消えれば一緒に消え、メモリも溜まりません。
+     * @type {WeakSet<Element>}
+     */
+    const own = new WeakSet();
+
+    /**
+     * 自前の要素を作る。
+     *
+     * @param {string} tag
+     * @param {string} className
+     * @returns {HTMLElement}
+     */
+    const make = (tag, className) => {
+        const el = document.createElement(tag);
+        el.className = className;
+        own.add(el);
+        return el;
+    };
+
+    /**
+     * 自前の要素をページに追加する。
+     * document_start で動くため <body> がまだ無いこともあり、その場合は <html> の直下に置きます
+     * （どちらも position: fixed なので、見た目は変わりません）。
+     *
+     * @param {HTMLElement} el
+     * @returns {HTMLElement} 追加した要素
+     */
+    const mount = (el) => (document.body ?? document.documentElement).appendChild(el);
+
+    // ================================================================
+    // 拡張機能とのつながり
+    // ================================================================
 
     /**
      * background.js へメッセージを送り、返事を待つ。
@@ -131,34 +243,61 @@ globalThis.SMDCore = (() => {
     };
 
     /**
-     * 自前の要素をページに追加する。
-     * document_start で動くため <body> がまだ無いこともあり、その場合は <html> の直下に置きます
-     * （どちらも position: fixed なので、見た目は変わりません）。
+     * この content script が、まだ拡張機能とつながっているか。
      *
-     * @param {HTMLElement} el
-     * @returns {HTMLElement} 追加した要素
-     */
-    const mount = (el) => (document.body ?? document.documentElement).appendChild(el);
-
-    /**
-     * この拡張機能が作った要素か。DOM の変化のうち、自分で起こしたものを見分けるのに使います。
+     * 拡張機能を更新・再読み込み・無効化すると、開いたままのページに残った content script からは
+     * 拡張機能の API が使えなくなり、chrome.runtime.id が無くなります。Chrome は新しい content script を
+     * 開いたままのタブへ入れ直さないので、ページを再読み込みするまで、このスクリプトが残り続けます。
      *
-     * ページのあらゆる変化で呼ばれるので、クラスを 1 つずつ調べるのではなく、matches() の 1 回で済ませます。
-     * classList は、初めて触った要素ごとにクラスの一覧を表すオブジェクトが作られ、その要素が消えるまで
-     * 残ります（Chromium 141 での計測では、1 要素あたり 168 バイト）。matches() なら何も作られないので、
-     * 速さだけでなくメモリの面でも軽く済みます。
-     *
-     * @param {Element} el
      * @returns {boolean}
      */
-    const isOwn = (el) => el.matches(OWN);
+    const alive = () => {
+        try {
+            return typeof chrome.runtime?.id === "string";
+        } catch {
+            return false;
+        }
+    };
+
+    /**
+     * 拡張機能とのつながりが切れたときに止める処理（DOM の見張りなど）。start() が登録します。
+     * @type {Set<() => void>}
+     */
+    const stoppers = new Set();
+
+    /**
+     * 拡張機能とのつながりが切れていたら、DOM の見張りなどを止める。
+     * 切れた後も見張り続けると、ページが変わるたびに、押しても動かないボタンを付け続けてしまいます。
+     *
+     * @returns {boolean} 切れていた（止めた）なら true
+     */
+    const retireIfOrphaned = () => {
+        if (alive()) return false;
+        for (const stop of stoppers) stop();
+        stoppers.clear();
+        return true;
+    };
+
+    /**
+     * 利用者自身の操作によるクリックか。
+     *
+     * ページ側のスクリプトが button.click() などで送ったクリック（isTrusted が false）で保存が始まると、
+     * ページの思うままにダウンロードを始められてしまいます（ブラウザの「複数ファイルの自動ダウンロード」の
+     * 確認も通りません）。ただし、キーボードで操作するための拡張機能などは、利用者の操作を受けて
+     * 同じ方法でクリックを送るので、直前に利用者の操作があったとき（userActivation）は受け付けます。
+     *
+     * @param {Event} e
+     * @returns {boolean}
+     */
+    const byUser = (e) => e.isTrusted || navigator.userActivation.isActive;
 
     // ================================================================
     // トースト（エラー通知）
     // ================================================================
 
-    /** トーストを消すタイマーの ID */
-    let toastTimer;
+    /** トーストの要素（初めて出すときに作ります）と、消すタイマーの ID */
+    let toastEl = null;
+    let toastTimer = 0;
 
     /**
      * 画面下にエラーメッセージを 3 秒だけ表示する。
@@ -168,13 +307,16 @@ globalThis.SMDCore = (() => {
      * @returns {void}
      */
     const toast = (message) => {
-        const el = document.querySelector(".smd-toast") ?? mount(document.createElement("div"));
+        toastEl ??= make("div", "smd-toast");
 
-        el.className = "smd-toast smd-toast-show";
-        el.textContent = message; // textContent なので HTML として解釈されません
+        // ページ側が <body> の中身を作り直すなどして外されていたら、付け直します。
+        if (!toastEl.isConnected) mount(toastEl);
+
+        toastEl.textContent = message; // textContent なので HTML として解釈されません
+        toastEl.classList.add("smd-toast-show");
 
         clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => el.classList.remove("smd-toast-show"), 3000);
+        toastTimer = setTimeout(() => toastEl.classList.remove("smd-toast-show"), 3000);
     };
 
     // ================================================================
@@ -191,7 +333,7 @@ globalThis.SMDCore = (() => {
      * 例: 4 枚中 1 枚目と 3 枚目を保存済み → 4 × 2^32 + 0b101。
      * 投稿ごとにオブジェクトや Set を持つより、ずっと少ないメモリで済み、background との
      * やり取りも軽くなります（1 投稿のメディアは最大 32 件まで。X も Bluesky も実際は 4 件まで）。
-     * 形式は background.js と共通です。
+     * 形式は background.js と共通です。持つのは、このタブのサイトの分だけです。
      *
      * @type {Map<string, number>}
      */
@@ -199,22 +341,6 @@ globalThis.SMDCore = (() => {
 
     /** 総数を上位に詰めるための桁（2^32） */
     const PACK = 2 ** 32;
-
-    /**
-     * 記録の値からメディア総数を取り出す。
-     *
-     * @param {number} value
-     * @returns {number}
-     */
-    const totalOf = (value) => Math.floor(value / PACK);
-
-    /**
-     * 記録の値から保存済みの番号のビットを取り出す（下位 32 ビット）。
-     *
-     * @param {number} value
-     * @returns {number}
-     */
-    const maskOf = (value) => value >>> 0;
 
     /**
      * n 番目のビットが立っているか。
@@ -239,14 +365,6 @@ globalThis.SMDCore = (() => {
     };
 
     /**
-     * 下から total 個のビットだけを取り出すための数（total 以上の番号は無視するため）。
-     *
-     * @param {number} total
-     * @returns {number}
-     */
-    const lowBits = (total) => (total >= 32 ? 0xffffffff : 2 ** total - 1);
-
-    /**
      * 記録に 1 件書き足す。
      *
      * @param {string} key - "サイト:投稿ID"
@@ -256,7 +374,8 @@ globalThis.SMDCore = (() => {
      */
     const remember = (key, index, total) => {
         if (!Number.isInteger(index) || index < 0 || index > 31 || !Number.isInteger(total)) return;
-        const mask = (maskOf(ledger.get(key) ?? 0) | (1 << index)) >>> 0;
+        // 値の下位 32 ビット（>>> 0 で取り出せます）が、保存済みの番号のビットです。
+        const mask = (((ledger.get(key) ?? 0) >>> 0) | (1 << index)) >>> 0;
         ledger.set(key, total * PACK + mask);
     };
 
@@ -272,8 +391,10 @@ globalThis.SMDCore = (() => {
         const value = (key && ledger.get(key)) || 0;
 
         // 総数は保存したときに数えた値を優先します。画面上の数は、読み込み途中だと少なく見えるためです。
-        const total = totalOf(value) || count;
-        const mask = (maskOf(value) & lowBits(total)) >>> 0;
+        const total = Math.floor(value / PACK) || count;
+
+        // 総数以上の番号のビットは無視します（下から total 個のビットだけを残す）。
+        const mask = ((value >>> 0) & (total >= 32 ? 0xffffffff : 2 ** total - 1)) >>> 0;
 
         return { mask, total, saved: countBits(mask) };
     };
@@ -289,7 +410,7 @@ globalThis.SMDCore = (() => {
     let counter = null;
 
     /** 待ちが 0 になった後、表示を消すためのタイマー ID */
-    let counterTimer;
+    let counterTimer = 0;
 
     /**
      * カウンターの要素を作る。
@@ -300,11 +421,9 @@ globalThis.SMDCore = (() => {
      * @returns {NonNullable<typeof counter>}
      */
     const createCounter = () => {
-        const el = document.createElement("div");
-        el.className = "smd-counter";
-
+        const el = make("div", "smd-counter");
         const nums = {};
-        const items = {};
+        let failed = null;
 
         // 「DL待ち」「DL完了」「DL失敗」の 3 つを、ラベルと数字の組で並べます。
         for (const [name, label] of [["pending", "counterPending"], ["done", "counterDone"], ["failed", "counterFailed"]]) {
@@ -313,17 +432,17 @@ globalThis.SMDCore = (() => {
 
             const text = item.appendChild(document.createElement("span"));
             text.className = "smd-counter-label";
-            text.textContent = SMD.t(label);
+            text.textContent = t(label);
 
             const num = item.appendChild(document.createElement("span"));
             num.className = "smd-counter-num";
 
             nums[name] = num.appendChild(document.createTextNode(""));
-            items[name] = item;
+            if (name === "failed") failed = item; // 失敗の欄は、0 件のとき隠すので覚えておきます
         }
 
         mount(el);
-        return { el, nums, failed: items.failed };
+        return { el, nums, failed };
     };
 
     /**
@@ -362,6 +481,9 @@ globalThis.SMDCore = (() => {
 
         counter ??= createCounter();
 
+        // ページ側が <body> の中身を作り直すなどして外されていたら、付け直します。
+        if (!counter.el.isConnected) mount(counter.el);
+
         setNumber(counter.nums.pending, pending);
         setNumber(counter.nums.done, done);
         setNumber(counter.nums.failed, failed);
@@ -381,17 +503,10 @@ globalThis.SMDCore = (() => {
     /**
      * 結果待ちのバッチ（ボタン 1 回分の保存）。
      * キーはバッチ ID、値は background から結果（smdBatch）が届いたときに呼ぶ関数です。
-     * @type {Map<string, (result: {done: number, failed: number}) => void>}
+     * 結果が分からなくなったとき（戻る・進むのキャッシュから戻ったとき）は null で呼びます。
+     * @type {Map<string, (result: {done: number, failed: number}|null) => void>}
      */
     const waiting = new Map();
-
-    /**
-     * 投稿情報から記録のキーを作る。
-     *
-     * @param {PostInfo} post
-     * @returns {string} 例: "x:1234567890"
-     */
-    const keyOf = (post) => `${post.site}:${post.postId}`;
 
     /**
      * 投稿のメディアを保存する。ボタンか、いいねが押されたときに呼ばれます。
@@ -407,64 +522,48 @@ globalThis.SMDCore = (() => {
      */
     const save = async (adapter, root, only, { quiet = false, skip = 0 } = {}) => {
         /** 「保存するものが無い」系の通知。quiet なら黙って見送ります */
-        const nothing = (key) => { if (!quiet) toast(SMD.t(key)); };
+        const nothing = (key) => { if (!quiet) toast(t(key)); };
 
         // 1. 投稿情報（ユーザー名・投稿 ID・本文など）を読む
         const post = adapter.readPost(root);
         if (!post) return nothing("toastNoPost");
 
-        // 2. メディア一覧と設定を、同時に取りに行く
-        const [all, settings] = await Promise.all([
-            adapter.getMedia(root, post).catch(() => []).then((list) => list ?? []),
-            SMD.loadSettings(),
-        ]);
-        const now = new Date(); // 同じ投稿のファイルで {dl_datetime} がずれないよう、1 回だけ取ります
+        // 2. メディア一覧をもらう（取得に失敗したときは、何も無かったものとして扱います）
+        const all = (await adapter.getMedia(root, post).catch(() => null)) ?? [];
 
         // まだ解除されていない投稿なら、先に解除するよう知らせます。
         if (all.length === 0 && adapter.isLocked?.(root)) return nothing("toastLocked");
 
-        // 3. 保存するものを選び、ファイル名を組み立てる。
-        //    番号（index）は保存済みの記録に使うので、メディアと組にして持ち回ります。
+        // 3. 保存するものを選ぶ。番号（index）は保存済みの記録とファイル名の {n} に使うので、メディアと組にします。
         const items = [];
         all.forEach((media, index) => {
-            if (!media || (only !== null && index !== only) || hasBit(skip, index)) return;
-            items.push({
-                url: media.url,
-                filename: SMD.buildPath(settings, { post, item: { ...media, index: index + 1, total: all.length }, now }),
-                index,
-            });
+            if (media && (only === null || index === only) && !hasBit(skip, index)) items.push({ ...media, index });
         });
-
         if (items.length === 0) return nothing("toastNoMedia");
 
-        // 4. background へ頼む。結果の受け取り口は、頼む前に用意しておきます
-        //    （結果が返事より先に届いても取りこぼさないように）。
+        // 4. background へ頼む。ファイル名は background が設定から組み立てます。
+        //    結果の受け取り口は、頼む前に用意しておきます（結果が返事より先に届いても取りこぼさないように）。
         const batch = crypto.randomUUID();
         const finished = new Promise((resolve) => waiting.set(batch, resolve));
 
-        const reply = await request({
-            type: "download",
-            batch,
-            items,
-            post: keyOf(post),
-            total: all.length,
-            saveAs: settings.alwaysSaveAs,
-            conflictAction: settings.conflictAction,
-        });
+        const reply = await request({ type: "download", batch, post, items, total: all.length });
 
         if (!reply) {
             waiting.delete(batch);
-            return toast(SMD.t("toastCommError"));
+            return toast(t("toastCommError"));
         }
 
         // 5. 1 件も受け付けられなかったときは、結果を待たずにここで終わります。
-        let result = { done: 0, failed: reply.rejected };
+        let result = { done: 0, failed: Number(reply.rejected) || 0 };
         if (reply.accepted > 0) result = await finished;
         else waiting.delete(batch);
 
+        // 結果が分からなくなった（ページが戻る・進むのキャッシュに入っている間に終わった）ときは、何も知らせません。
+        if (!result) return;
+
         // 6. 失敗があったときだけ知らせます（成功の件数はカウンターで分かります）。
         const { done, failed } = result;
-        if (failed) toast(done ? SMD.t("toastPartial", done, failed) : SMD.t("toastFailed", failed));
+        if (failed) toast(done ? t("toastPartial", done, failed) : t("toastFailed", failed));
     };
 
     // ================================================================
@@ -518,15 +617,16 @@ globalThis.SMDCore = (() => {
         let title = titles.get(key);
 
         if (title === undefined) {
-            const base = index < 0 ? SMD.t("btnMainTitle") : SMD.t("btnItemTitle", index + 1);
-            title = done ? SMD.t("titleSaved", base) : base;
+            const base = index < 0 ? t("btnMainTitle") : t("btnItemTitle", index + 1);
+            title = done ? t("titleSaved", base) : base;
             titles.set(key, title);
         }
         return title;
     };
 
     /**
-     * ダウンロードボタンを作る。アイコン・枚数バッジ・ツールチップは look() が付けます。
+     * ダウンロードボタンを作る。枚数バッジ・ツールチップ・保存済みの印は look() が付けます。
+     * アイコン（矢印・チェックマーク）は content.css が ::before に描くので、ボタンの中身は枚数バッジの文字だけです。
      * クリックは watchClicks() が document でまとめて受け取るので、ここではリスナーを付けません
      * （ボタンが何百個あっても、リスナーは 1 つで済みます）。
      *
@@ -534,11 +634,10 @@ globalThis.SMDCore = (() => {
      * @returns {HTMLButtonElement}
      */
     const button = (index) => {
-        const el = document.createElement("button");
+        const el = make("button", index < 0 ? "smd-button" : "smd-item-button");
 
         // type="button" を明示しないと、フォーム内に置かれたとき送信ボタン扱いになります。
         el.type = "button";
-        el.className = index < 0 ? "smd-button" : "smd-item-button";
 
         // 番号を覚えておきます（どれを保存するか、描き分け、番号が合っているかの確認に使います）。
         buttonInfo.set(el, { index, done: null, badge: "" });
@@ -567,9 +666,10 @@ globalThis.SMDCore = (() => {
     };
 
     /**
-     * ボタンの見た目（アイコン・バッジ・ツールチップ・保存済みクラス）を整える。
+     * ボタンの見た目（保存済みの印・ツールチップ・枚数バッジ）を整える。
      * 前回と同じ見た目なら DOM に触りません。書き換えると、ブラウザの描き直しと
-     * MutationObserver の反応が起きるため、変わったときだけ書きます。
+     * MutationObserver の反応が起きるため、変わったところだけ書きます。
+     * 保存済みかどうかは smd-done クラスで表し、アイコンの矢印とチェックマークも CSS がこれを見て描き分けます。
      *
      * @param {HTMLButtonElement} el
      * @param {ButtonInfo} info - このボタンについて覚えていること（描いた見た目をここに書き留めます）
@@ -578,20 +678,14 @@ globalThis.SMDCore = (() => {
      * @returns {void}
      */
     const look = (el, info, done, badge) => {
-        if (info.done === done && info.badge === badge) return;
-
-        info.done = done;
-        info.badge = badge;
-        el.classList.toggle("smd-done", done);
-        el.title = titleOf(info.index, done);
-
-        if (badge) {
-            const count = document.createElement("span");
-            count.className = "smd-count";
-            count.textContent = badge;
-            el.replaceChildren(iconOf(done), count);
-        } else {
-            el.replaceChildren(iconOf(done));
+        if (info.done !== done) {
+            info.done = done;
+            el.classList.toggle("smd-done", done);
+            el.title = titleOf(info.index, done);
+        }
+        if (info.badge !== badge) {
+            info.badge = badge;
+            el.textContent = badge; // 文字だけなので textContent で入れます（HTML としては解釈されません）
         }
     };
 
@@ -635,6 +729,9 @@ globalThis.SMDCore = (() => {
             root, key: null, count: media.length, locked, remove: existing, keep: [], bar: null, add: [], missing: false,
         };
         if (media.length === 0 && !locked) return plan; // メディアが無ければ、ボタンはすべて取り除く
+
+        // 画面に出ていない分も含めた総数が分かるなら、そちらで描き分けます（拡大表示など）。
+        if (adapter.mediaCount) plan.count = Math.max(media.length, adapter.mediaCount(root) || 0);
 
         // メインボタン: 覚えているものが今もこの投稿にあれば、そのまま使います。
         const main = mainButtons.get(root);
@@ -715,65 +812,64 @@ globalThis.SMDCore = (() => {
     };
 
     // ================================================================
-    // ボタンのクリック
+    // クリック（ボタンと、いいね連動保存）
     // ================================================================
 
     /**
-     * ボタンのクリックを document でまとめて受け取り、保存を始める。
+     * イベントが、この拡張機能のボタンの上で起きたものなら、そのボタンを返す。
+     *
+     * @param {Event} e
+     * @returns {Element|null}
+     */
+    const buttonOf = (e) => (e.target instanceof Element ? e.target.closest(BUTTONS) : null);
+
+    /**
+     * ボタンのクリックと、いいねのクリックを、document でまとめて受け取る。
      *
      * キャプチャフェーズ（第 3 引数 true）の document は、ページ側のどの要素よりも先に受け取れるので、
      * SNS 側の処理（投稿を開く、画像を拡大する等）が動く前に止められます。
      * mousedown も止めるのは、押した瞬間に反応する処理があるためです。
+     * 個別ボタンは画像のリンクの中にあるので、中クリック（auxclick）も止めないと、ボタンを中クリックしただけで
+     * リンク先（X なら画像の拡大表示）が新しいタブで開きます。Enter / Space も、ページ側のキーボード操作
+     * （X なら Enter で投稿を開く）に届かないようにします（ボタンを押す動作そのものは止めません）。
+     *
+     * いいねのクリックは見るだけで、preventDefault も stopPropagation も呼びません（いいね自体には手を触れない）。
      *
      * @param {SiteAdapter} adapter
      * @returns {void}
      */
     const watchClicks = (adapter) => {
         document.addEventListener("mousedown", (e) => {
-            if (e.target instanceof Element && e.target.closest(BUTTONS)) e.stopPropagation();
+            if (buttonOf(e)) e.stopPropagation();
         }, true);
 
-        document.addEventListener("click", (e) => {
-            const el = e.target instanceof Element ? e.target.closest(BUTTONS) : null;
-            if (!el) return;
-
+        document.addEventListener("auxclick", (e) => {
+            if (!buttonOf(e)) return;
             e.preventDefault();
             e.stopImmediatePropagation();
-
-            // 覚えの無いボタン（拡張機能を更新する前に作られて残ったものなど）は、番号が分からないので見送ります。
-            // 保存中も受け付けません。CSS の pointer-events: none はマウスにしか効かず、
-            // キーボード（Enter / Space）での連打は止められないため、ここでも確かめます。
-            const root = el.closest(adapter.postRoot);
-            const info = buttonInfo.get(el);
-            if (!root || !info || el.classList.contains("smd-busy")) return;
-
-            el.classList.add("smd-busy");
-            save(adapter, root, info.index < 0 ? null : info.index)
-                .catch(() => toast(SMD.t("toastCommError")))
-                .finally(() => el.classList.remove("smd-busy"));
         }, true);
-    };
 
-    // ================================================================
-    // いいね連動保存
-    // ================================================================
+        for (const type of ["keydown", "keyup"]) {
+            document.addEventListener(type, (e) => {
+                if ((e.key === "Enter" || e.key === " ") && buttonOf(e)) e.stopPropagation();
+            }, true);
+        }
 
-    /**
-     * いいねのクリックを見張り、設定がオンなら保存も行う。
-     * 見るだけで、preventDefault も stopPropagation も呼びません（いいね自体には手を触れない）。
-     *
-     * @param {SiteAdapter} adapter
-     * @returns {void}
-     */
-    const watchLikes = (adapter) => {
-        if (!adapter.likeButton) return;
-
-        // 設定は起動時に読み、変更されたら追いかけます。
-        let enabled = false;
-        SMD.loadSettings().then((s) => { enabled = s.likeDownload; });
-        chrome.storage.onChanged.addListener((changes, area) => {
-            if (area === "sync" && changes.likeDownload) enabled = changes.likeDownload.newValue === true;
-        });
+        // いいね連動保存の設定。起動時に読み、変更されたら追いかけます（いいねのセレクタが無いサイトでは使いません）。
+        // つながりが切れた後（retired）は、設定が変わっても有効にしません。
+        let likes = false;
+        let retired = false;
+        if (adapter.likeButton) {
+            chrome.storage.sync.get({ likeDownload: false })
+                .then((s) => { likes = s.likeDownload === true && !retired; }, () => {});
+            chrome.storage.onChanged.addListener((changes, area) => {
+                if (area === "sync" && changes.likeDownload) likes = changes.likeDownload.newValue === true && !retired;
+            });
+            stoppers.add(() => {
+                retired = true;
+                likes = false;
+            });
+        }
 
         /**
          * いいねで保存を始めて、まだ終わっていない投稿のキー。
@@ -783,18 +879,30 @@ globalThis.SMDCore = (() => {
          */
         const started = new Set();
 
-        document.addEventListener("click", (e) => {
-            // ページ上のすべてのクリックが通るので、いちばん軽い判定から順に行います。
-            if (!enabled || !(e.target instanceof Element)) return;
-
+        /**
+         * いいねのクリックなら、その投稿のまだ保存していないメディアを保存する。
+         *
+         * @param {MouseEvent} e
+         * @returns {void}
+         */
+        const onLike = (e) => {
             // 「いいねを取り消す」ボタンは別のセレクタなので、いいねを付けたときだけ一致します。
-            const root = e.target.closest(adapter.likeButton)?.closest(adapter.postRoot);
+            const like = e.target instanceof Element ? e.target.closest(adapter.likeButton) : null;
+            if (!like) return;
+
+            // 拡張機能を更新・再読み込みした後のページでは、保存できないので静かに見送ります。
+            if (retireIfOrphaned()) return;
+
+            const root = adapter.likeRoot ? adapter.likeRoot(like) : like.closest(adapter.postRoot);
             if (!root) return;
 
             // メディアの無い投稿は静かに見送ります。
-            const count = adapter.mediaContainers(root).length;
-            const id = count > 0 ? adapter.postId(root) : null;
+            const shown = adapter.mediaContainers(root).length;
+            const id = shown > 0 ? adapter.postId(root) : null;
             if (!id) return;
+
+            // 画面に出ていない分も含めた総数（拡大表示など）。保存済みかどうかは、この数で判断します。
+            const count = adapter.mediaCount ? Math.max(shown, adapter.mediaCount(root) || 0) : shown;
 
             // 保存中か、全件保存済みなら何もしません（ボタンからなら何度でも保存できます）。
             const key = `${adapter.site}:${id}`;
@@ -808,6 +916,41 @@ globalThis.SMDCore = (() => {
             save(adapter, root, null, { quiet: true, skip: mask })
                 .catch(() => {})
                 .finally(() => started.delete(key));
+        };
+
+        document.addEventListener("click", (e) => {
+            const el = buttonOf(e);
+            if (!el) {
+                // ページ上のすべてのクリックが通るので、設定がオフなら何もせずに見送ります。
+                if (likes) onLike(e);
+                return;
+            }
+
+            e.preventDefault();
+            e.stopImmediatePropagation();
+
+            // ページ側のスクリプトが送ったクリックでは保存しません（byUser() 参照）。
+            if (!byUser(e)) return;
+
+            // 拡張機能を更新・再読み込みした後のページでは、もう保存できません。再読み込みを促します。
+            // 文言は起動時に一度取り出してあるので、拡張機能の API が使えなくなっていても出せます。
+            if (retireIfOrphaned()) {
+                toast(t("toastCommError"));
+                return;
+            }
+
+            // 覚えの無いボタン（拡張機能を更新する前に作られて残ったものなど）は、番号が分からないので見送ります。
+            // 保存中も受け付けません（保存中のボタンは押せる見た目のまま残し、ここで見送ります。
+            // CSS の pointer-events: none で押せなくすると、クリックがボタンの下の画像のリンクや投稿へ
+            // 素通りして、拡大表示や投稿のページが開いてしまうためです）。
+            const root = el.closest(adapter.postRoot);
+            const info = buttonInfo.get(el);
+            if (!root || !info || el.classList.contains("smd-busy")) return;
+
+            el.classList.add("smd-busy");
+            save(adapter, root, info.index < 0 ? null : info.index)
+                .catch(() => toast(t("toastCommError")))
+                .finally(() => el.classList.remove("smd-busy"));
         }, true);
     };
 
@@ -828,15 +971,18 @@ globalThis.SMDCore = (() => {
 
         /**
          * このサイトの記録のキーの頭（"x:" など）。
-         * background の記録と知らせは全サイト分がまとめて届くので、このサイトのものを見分けるのに使います。
+         * 保存できた 1 件の知らせ（smdUpdate）は全サイトのタブに届くので、このサイトのものを見分けるのに使います。
          */
         const prefix = `${adapter.site}:`;
 
         // <html data-smd-site="x"> のような目印を付け、CSS でサイトごとのアクセント色を切り替えます。
         document.documentElement.dataset.smdSite = adapter.site;
 
+        // 拡張機能とのつながりが切れた後（更新・再読み込みの後）にも出せるよう、その知らせの文言を
+        // 今のうちに取り出して覚えさせておきます（t() は一度取り出した文言を覚えています）。
+        t("toastCommError");
+
         watchClicks(adapter);
-        watchLikes(adapter);
 
         /** 次の描画フレームで見直す投稿 */
         const dirty = new Set();
@@ -864,6 +1010,12 @@ globalThis.SMDCore = (() => {
         const flush = () => {
             frame = 0;
 
+            // 拡張機能とのつながりが切れていたら、見張りを止めて何もしません。
+            if (retireIfOrphaned()) {
+                dirty.clear();
+                return;
+            }
+
             const plans = [];
             for (const root of dirty) {
                 if (!root.isConnected) continue; // 待っている間に消えた投稿は飛ばす
@@ -883,8 +1035,14 @@ globalThis.SMDCore = (() => {
                 }
 
                 // 置き場所が見つからなかったメディアがあれば、少し後でその投稿だけやり直します。
+                // 全部付けられたら回数を数え直します。数えたままにすると、X のように要素が別の投稿の表示へ
+                // 使い回されたとき、その要素ではもう二度とやり直さなくなってしまうためです。
+                if (!plan.missing) {
+                    retries.delete(plan.root);
+                    continue;
+                }
                 const tried = retries.get(plan.root) ?? 0;
-                if (plan.missing && tried < RETRY_LIMIT) {
+                if (tried < RETRY_LIMIT) {
                     retries.set(plan.root, tried + 1);
                     setTimeout(() => mark(plan.root), RETRY_DELAY);
                 }
@@ -922,19 +1080,37 @@ globalThis.SMDCore = (() => {
         };
 
         /**
+         * 追加された要素の中にある投稿（要素自身を含む）に、すべて印を付ける。
+         * 中に投稿があるかを querySelector で先に確かめるのは、無いとき（ほとんどの場合）に
+         * querySelectorAll の結果を入れる一覧を作らずに済むからです。
+         *
+         * @param {Element} node - 子を持つ要素（子の無い要素は、投稿でも投稿を含むものでもありません）
+         * @returns {void}
+         */
+        const markRoots = (node) => {
+            if (node.matches(postRoot)) mark(node);
+            if (node.querySelector(postRoot) === null) return;
+
+            const roots = node.querySelectorAll(postRoot);
+            for (let i = 0; i < roots.length; i += 1) mark(roots[i]);
+        };
+
+        /**
          * 要素が、ボタンに関係するもの（adapter.watch に当てはまる要素か、それを含む要素）か。
          * adapter.watch が無ければ、どの要素も関係ありとみなします。
+         * 子の無い要素は、中を探すまでもないので、要素自身だけを確かめます。
          *
          * @param {Element} el
          * @returns {boolean}
          */
-        const matters = (el) => !watch || el.matches(watch) || el.querySelector(watch) !== null;
+        const matters = (el) =>
+            !watch || el.matches(watch) || (el.childElementCount > 0 && el.querySelector(watch) !== null);
 
         /**
          * 削除された要素の中に、ボタンに関係するものがあるか。自前の要素と、文字だけの変化は関係ありません。
          *
          * NodeList は for...of ではなく添字でたどります。for...of は 1 回まわすごとに
-         * 小さなオブジェクトを作るので、空や 1 件のことが多いこの一覧では、添字のほうが数倍速く済みます。
+         * 小さなオブジェクトを作るので、空や 1 件のことが多いこの一覧では、添字のほうが速く済みます。
          *
          * @param {NodeList} nodes
          * @returns {boolean}
@@ -942,7 +1118,7 @@ globalThis.SMDCore = (() => {
         const touches = (nodes) => {
             for (let i = 0; i < nodes.length; i += 1) {
                 const node = nodes[i];
-                if (node.nodeType === 1 && !isOwn(node) && matters(node)) return true;
+                if (node.nodeType === 1 && !own.has(node) && matters(node)) return true;
             }
             return false;
         };
@@ -955,7 +1131,7 @@ globalThis.SMDCore = (() => {
             if (message?.type === "smdUpdate") {
                 showCounts(message.counts);
 
-                // 保存できた 1 件。知らせは X・Bluesky・ポイピク・Privatter・Privatter+ のどのタブにも届くので、
+                // 保存できた 1 件。知らせは対応サイトのどのタブにも届くので、
                 // ほかのサイトのものは覚えず、投稿を探すこともしません。
                 const saved = message.saved;
                 if (typeof saved?.key === "string" && saved.key.startsWith(prefix)) {
@@ -974,22 +1150,42 @@ globalThis.SMDCore = (() => {
             return false; // 返事はしません
         });
 
+        /**
+         * background から、今のカウンターと、このサイトの記録をもらって反映する。
+         * 開いたときと、戻る・進むのキャッシュ（bfcache）からページが戻ってきたときに呼びます。
+         *
+         * @returns {void}
+         */
+        const sync = () => {
+            request({ type: "smdState", site: adapter.site }).then((state) => {
+                // background はこのサイトの分だけを返しますが、受け取った値は念のため確かめてから写します。
+                // for...in で直接たどるのは、Object.entries() だと記録の件数ぶんの配列を作ってしまうためです。
+                const history = state?.history ?? {};
+                for (const key in history) {
+                    const value = history[key];
+                    if (key.startsWith(prefix) && Number.isSafeInteger(value)) ledger.set(key, value);
+                }
+                showCounts(state?.counts ?? undefined);
+
+                // 記録が届く前に描いた投稿のうち、記録のあるものだけを見直します
+                // （記録が空なら、どの投稿の見た目も変わらないので何もしません）。
+                if (ledger.size > 0) markByKey((key) => ledger.has(key));
+            }).catch(() => {});
+        };
+
         // 開いた時点のカウンターと記録をもらいます。
         // 再読み込みしたり別のタブを開いたりしても、保存中の数と保存済みの見た目が引き継がれます。
-        request({ type: "smdState" }).then((state) => {
-            // 記録のうち、このサイトのものだけを写します。
-            // for...in で直接たどるのは、Object.entries() だと記録の件数ぶんの配列を作ってしまうためです。
-            const history = state?.history ?? {};
-            for (const key in history) {
-                const value = history[key];
-                if (key.startsWith(prefix) && Number.isSafeInteger(value)) ledger.set(key, value);
-            }
-            showCounts(state?.counts);
+        sync();
 
-            // 記録が届く前に描いた投稿のうち、記録のあるものだけを見直します
-            // （記録が空なら、どの投稿の見た目も変わらないので何もしません）。
-            if (ledger.size > 0) markByKey((key) => ledger.has(key));
-        }).catch(() => {});
+        // 戻る・進むのキャッシュに入っている間は、background からの知らせが届きません。
+        // その間に終わった保存の結果は二度と届かないので、待っているボタンの「保存中」を解き、
+        // カウンターと記録を取り直します。
+        addEventListener("pageshow", (e) => {
+            if (!e.persisted) return;
+            for (const resolve of waiting.values()) resolve(null);
+            waiting.clear();
+            sync();
+        });
 
         // DOM の変化から、見直しが必要な投稿だけを拾います。
         //   - 投稿を含む要素が追加された → 中の投稿すべて
@@ -1001,27 +1197,33 @@ globalThis.SMDCore = (() => {
         //
         // ここはページのあらゆる変化で呼ばれます。X ではスクロールするだけで毎秒何百件も届くので、
         // 関係のない変化は、できるだけ少ない手数で見送ります。
-        new MutationObserver((records) => {
+        const observer = new MutationObserver((records) => {
+            // 同じ要素の中の変化は、続けて届くことがよくあります（1 つの要素に子を続けて足したときなど）。
+            // そこで、直前の変化と同じ要素なら、どの投稿の中か（closest）を調べ直さずに使い回します。
+            //   lastRoot … その要素を囲む投稿。投稿の外なら null、見送る変化（自前の要素の中など）なら false
+            let lastTarget = null;
+            let lastRoot = null;
+
             for (const record of records) {
                 const target = record.target;
+                if (target !== lastTarget) {
+                    lastTarget = target;
+                    lastRoot = target.nodeType !== 1 || own.has(target) ? false : target.closest(postRoot);
+                }
+                const root = lastRoot;
+                if (root === false) continue;
 
-                // 属性（src / poster / href）の変化。自前の要素はこれらの属性を持たないので、
-                // 自分で起こした変化かどうかは確かめるまでもありません。
+                // 属性（src / poster / href）の変化。その投稿を見直します。
                 if (record.type === "attributes") {
-                    const root = target.closest(postRoot);
-                    if (root) mark(root);
+                    if (root !== null) mark(root);
                     continue;
                 }
 
                 // ここから下は、子の増減（childList）です。
-                if (target.nodeType !== 1 || isOwn(target)) continue;
-
-                // どの投稿の中の変化か（投稿の外なら null）。
                 // その投稿に関係のある要素が増減したかどうかを、これから調べる必要があるか。
                 // 投稿の外の変化と、もう見直すことが決まっている投稿の中の変化は、調べるまでもありません。
                 // （メディアの中身の変化、たとえば動画プレイヤーの再生時間の表示は拾いません。
                 //   置き場所の大きさが後から決まる場合は、flush のやり直しで拾います）
-                const root = target.closest(postRoot);
                 let undecided = root !== null && !dirty.has(root);
 
                 // 追加された要素を 1 回だけたどり、次の 2 つをまとめて調べます
@@ -1029,40 +1231,40 @@ globalThis.SMDCore = (() => {
                 const added = record.addedNodes;
                 for (let i = 0; i < added.length; i += 1) {
                     const node = added[i];
-                    if (node.nodeType !== 1 || isOwn(node)) continue;
+                    if (node.nodeType !== 1 || own.has(node)) continue;
 
-                    // 1. 投稿そのものが追加された場合（子を持たない要素は、投稿ではありません）。
-                    //    中に投稿があるかを querySelector で先に確かめるのは、無いとき（ほとんどの場合）に
-                    //    querySelectorAll の結果を入れる一覧を作らずに済むからです。
-                    if (node.childElementCount > 0) {
-                        if (node.matches(postRoot)) {
-                            mark(node);
-                        } else if (node.querySelector(postRoot) !== null) {
-                            const roots = node.querySelectorAll(postRoot);
-                            for (let j = 0; j < roots.length; j += 1) mark(roots[j]);
-                        }
-                    }
-
-                    // 2. 投稿の中に、ボタンに関係する要素が追加された場合
+                    // 1. 投稿の中に、ボタンに関係する要素が追加された場合
                     if (undecided && matters(node)) {
                         mark(root);
                         undecided = false;
                     }
+
+                    // 2. 投稿そのもの、または投稿を含む要素が追加された場合
+                    if (node.childElementCount > 0) markRoots(node);
                 }
 
                 // 3. 投稿の中から、ボタンに関係する要素が削除された場合
                 if (undecided && touches(record.removedNodes)) mark(root);
             }
-        }).observe(document.documentElement, {
+        });
+        observer.observe(document.documentElement, {
             childList: true,
             subtree: true,
             attributes: true,
             attributeFilter: ["src", "poster", "href"],
         });
 
+        // 拡張機能とのつながりが切れたら、DOM の見張りをやめます（retireIfOrphaned() 参照）。
+        stoppers.add(() => {
+            observer.disconnect();
+            cancelAnimationFrame(frame);
+            frame = 0;
+            dirty.clear();
+        });
+
         markAll();
         return { refresh: markAll };
     };
 
-    return { start, request };
+    return { start, request, decode, textOf, jstTime, photoOf };
 })();

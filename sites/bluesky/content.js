@@ -42,19 +42,8 @@
     /** "/profile/ハンドル/post/投稿ID" を分解する */
     const POST_PATH = /^\/profile\/([^/]+)\/post\/([^/?#]+)/;
 
-    /**
-     * URL の一部を安全にデコードする。壊れた「%」があっても例外を投げず、元の文字列を返します。
-     *
-     * @param {string} s
-     * @returns {string}
-     */
-    const decode = (s) => {
-        try {
-            return decodeURIComponent(s);
-        } catch {
-            return s;
-        }
-    };
+    /** URL の一部を安全にデコードする（壊れた「%」があっても例外を投げない） */
+    const { decode } = SMDCore;
 
     /**
      * 要素が引用投稿（内側の投稿）に属しているか。
@@ -67,15 +56,6 @@
      * @returns {boolean}
      */
     const isQuoted = (el, root) => el.closest(SCOPE) !== root;
-
-    /**
-     * 投稿内の要素を探し、引用部分のものを除いて返す。
-     *
-     * @param {string} selector
-     * @param {Element} root
-     * @returns {Element[]}
-     */
-    const own = (selector, root) => [...root.querySelectorAll(selector)].filter((el) => !isQuoted(el, root));
 
     /**
      * 投稿内の要素を探し、引用部分のものを除いた最初の 1 つを返す。
@@ -127,11 +107,15 @@
         /** 見つけたリンクが投稿者本人のものか（照合できないときは通す） */
         const isOwner = (m) => !owner || owner.startsWith("did:") || decode(m[1]) === owner;
 
+        // 投稿へのリンクを画面の順にたどり、引用部分のものは飛ばします。
+        // 本人のリンクが見つかった時点で終わるので、ほとんどの投稿は最初の 1 本を調べるだけで済みます
+        // （引用部分かどうかの確かめも、そこまでのリンクにしか行いません）。
         let first = null;
-        for (const a of own('a[href*="/post/"]', root)) {
+        for (const a of root.querySelectorAll('a[href*="/post/"]')) {
+            if (isQuoted(a, root)) continue;
             const m = POST_PATH.exec(a.pathname);
             if (!m) continue;
-            if (isOwner(m)) return m; // 本人のリンクが見つかった時点で終わり
+            if (isOwner(m)) return m;
             first ??= m;
         }
         if (first) return first;

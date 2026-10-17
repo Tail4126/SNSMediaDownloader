@@ -20,8 +20,8 @@
      * メディアを包む要素。X は data-testid 属性で役割を示しています。
      *
      * 「div[…], div[…], div[…]」と 3 つ並べても同じ要素に当てはまりますが、:is() でまとめておくと、
-     * ブラウザは「div か」を 1 回確かめるだけで済みます。投稿の表示が変わるたびに使うセレクタで、
-     * 投稿 1 件（約 320 要素）を調べる時間は、Chromium 141 での計測で半分以下になりました。
+     * ブラウザは「div か」を 1 回確かめるだけで済みます。投稿の表示が変わるたびに使うセレクタなので、
+     * こうした小さな差が積み重なります。
      */
     const MEDIA =
         'div:is([data-testid="tweetPhoto"], [data-testid="videoPlayer"], [data-testid="videoComponent"])';
@@ -47,11 +47,37 @@
      */
     const STATUS_PATH = /^\/([^/]+)\/(?:web\/)?status\/(\d+)/;
 
+    /**
+     * 画像の拡大表示（"/ユーザー名/status/123/photo/1" などで開く、黒い背景の画面）。
+     * 拡大された画像と、その下の返信・いいねの並び（操作バー）は、投稿の <article> の外にあり、
+     * この要素が両方を囲んでいます。そこで、この要素も投稿 1 件のコンテナとして扱います。
+     * 右側の会話欄の <article> もこの中にありますが、そちらは今までどおりふつうの投稿として扱います
+     * （postRoot に当てはまる要素のうち、いちばん近いものが持ち主になるため）。
+     */
+    const VIEWER = 'div[role="dialog"][aria-modal="true"]';
+
+    /** 投稿 1 件のコンテナ。タイムラインの投稿（article）と、画像の拡大表示です */
+    const POST_ROOT = `article, ${VIEWER}`;
+
+    /** 拡大表示で、画像や動画を包む要素（スワイプで閉じられる範囲） */
+    const VIEWER_MEDIA = '[data-testid="swipe-to-dismiss"]';
+
+    /** 拡大表示の URL。[1] がユーザー名、[2] が投稿 ID、[3] が何件目か（1 始まり） */
+    const VIEWER_PATH = /^\/([^/]+)\/status\/(\d+)\/(?:photo|video)\/(\d+)/;
+
+    /** X の投稿 ID（Snowflake）に詰められた時刻の起点（2010-11-04T01:42:54.657Z） */
+    const EPOCH = 1288834974657n;
+
     /** 動画のサムネイル URL からメディア ID を取り出す */
     const VIDEO_ID = /\/(?:ext_tw_video_thumb|amplify_video_thumb)\/(\d+)\//;
 
-    /** 受け入れるメディアの条件。ページ側のスクリプトが偽のデータを送ってきても弾けるよう絞ります */
-    const HOSTS = new Set(["pbs.twimg.com", "video.twimg.com"]);
+    /**
+     * 受け入れるメディアの条件。ページ側のスクリプトが偽のデータを送ってきても弾けるよう絞ります。
+     * URL は X のメディア配信ホスト（pbs.twimg.com / video.twimg.com）の https だけです。ホスト名のすぐ後ろに「/」が
+     * 来ることまで確かめるので、"https://pbs.twimg.com.example/" や "https://pbs.twimg.com@example/" のような
+     * 別のホストを指す URL は当てはまりません（保存する前に、バックグラウンドでも URL を解析して確かめ直します）。
+     */
+    const MEDIA_URL = /^https:\/\/(?:pbs|video)\.twimg\.com\//;
     const KINDS = new Set(["photo", "video", "animated_gif"]);
     const EXTS = new Set(["jpg", "jpeg", "png", "webp", "gif", "mp4"]);
 
@@ -59,18 +85,25 @@
     const CACHE_LIMIT = 2000;
 
     /**
+     * 1 通の知らせで受け付ける件数と、1 投稿のメディア数の上限（X は 1 投稿 4 件まで）。
+     * ページ側のスクリプトが巨大な偽の知らせを送ってきても、処理が重くならず、
+     * 1 回のボタンで際限なく保存が始まることもないようにします。
+     */
+    const ENTRY_LIMIT = 1000;
+    const LIST_LIMIT = 32;
+
+    /** キャッシュのキーの形（投稿 ID、または "v" + 動画のメディア ID） */
+    const CACHE_KEY = /^v?\d{1,25}$/;
+
+    /**
      * メディア 1 件の情報が安全に使える形か確かめる。
-     * URL.parse は、解析できなければ例外ではなく null を返すので、1 回の解析で済みます。
+     * X の API の応答 1 つで何百件も届くので、URL は解析せず、文字列の頭だけで確かめます（MEDIA_URL 参照）。
      *
      * @param {unknown} m
      * @returns {boolean}
      */
-    const isValidMedia = (m) => {
-        if (!KINDS.has(m?.kind) || !EXTS.has(m.ext) || typeof m.url !== "string") return false;
-
-        const url = URL.parse(m.url);
-        return url !== null && url.protocol === "https:" && HOSTS.has(url.hostname);
-    };
+    const isValidMedia = (m) =>
+        KINDS.has(m?.kind) && EXTS.has(m.ext) && typeof m.url === "string" && MEDIA_URL.test(m.url);
 
     /**
      * interceptor.js から届いたメディア情報。キーは投稿 ID、または "v" + 動画のメディア ID。
@@ -84,11 +117,20 @@
     addEventListener("message", (e) => {
         if (e.source !== window || e.data?.channel !== "smd-cache") return;
 
-        for (const [id, list] of Object.entries(e.data.entries ?? {})) {
-            if (Array.isArray(list) && list.some(Boolean) && list.every((m) => m === null || isValidMedia(m))) {
-                cache.delete(id); // 入れ直して新しい位置へ（Map は挿入順を保つので、先頭が一番古い）
-                cache.set(id, list);
-            }
+        const entries = e.data.entries;
+        if (entries === null || typeof entries !== "object") return;
+
+        let seen = 0;
+        for (const id in entries) {
+            if ((seen += 1) > ENTRY_LIMIT) break;
+
+            const list = entries[id];
+            if (!CACHE_KEY.test(id) || !Array.isArray(list) || list.length === 0 || list.length > LIST_LIMIT) continue;
+            if (!list.some(Boolean) || !list.every((m) => m === null || isValidMedia(m))) continue;
+
+            // 使う項目だけを写し取ります（ページ側が足した余計な項目は持ち込みません）。
+            cache.delete(id); // 入れ直して新しい位置へ（Map は挿入順を保つので、先頭が一番古い）
+            cache.set(id, list.map((m) => m && { kind: m.kind, url: m.url, ext: m.ext }));
         }
 
         while (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value);
@@ -160,12 +202,84 @@
     const matchStatus = (root) => STATUS_PATH.exec(statusLink(root)?.pathname ?? location.pathname);
 
     /**
+     * 投稿のコンテナが、画像の拡大表示か。
+     * postRoot に当てはまるのは <article> と拡大表示（<div>）だけなので、要素名を見るだけで分かります。
+     *
+     * @param {Element} root
+     * @returns {boolean}
+     */
+    const isViewer = (root) => root.tagName === "DIV";
+
+    /**
+     * 拡大表示している投稿のパスを分解する。
+     * ふだんは今開いている URL から読みます。URL が拡大表示の形でない（URL が変わる前に描かれたなど）ときは、
+     * 操作バーの「表示数」のリンク（"/ユーザー名/status/123/analytics"）から読みます。
+     *
+     * @param {Element} root - 拡大表示
+     * @returns {RegExpExecArray|null} [1] がユーザー名、[2] が投稿 ID
+     */
+    const viewerMatch = (root) => {
+        const here = VIEWER_PATH.exec(location.pathname);
+        if (here) return here;
+
+        for (const a of root.querySelectorAll('a[href*="/status/"]')) {
+            if (a.closest("article") === null) return STATUS_PATH.exec(a.pathname);
+        }
+        return null;
+    };
+
+    /**
+     * 拡大表示の中の、画像・動画を包む要素（右側の会話欄の中のものは除く）。
+     *
+     * @param {Element} root - 拡大表示
+     * @returns {Element[]}
+     */
+    const viewerContainers = (root) => [...root.querySelectorAll(VIEWER_MEDIA)].filter((el) => el.closest("article") === null);
+
+    /**
+     * 画面にある、指定した投稿の <article>（後ろのタイムラインや、拡大表示の右側の会話欄）。
+     * 投稿へのリンクで見分けます。保存するときなど、たまにしか呼ばれません。
+     *
+     * @param {string} id - 投稿 ID
+     * @returns {Element[]}
+     */
+    const articlesOf = (id) =>
+        [...document.querySelectorAll("article")].filter((a) => STATUS_PATH.exec(statusLink(a)?.pathname ?? "")?.[2] === id);
+
+    /**
+     * 投稿 ID から投稿日時を求める。X の投稿 ID は、上位のビットに投稿した時刻（ミリ秒）が入っています。
+     * 拡大表示しか無く、投稿日時の表示が見つからないときの代わりです。
+     *
+     * @param {string} id
+     * @returns {string|null} ISO 8601
+     */
+    const timeOf = (id) => {
+        try {
+            return new Date(Number((BigInt(id) >> 22n) + EPOCH)).toISOString();
+        } catch {
+            return null;
+        }
+    };
+
+    /**
      * この投稿のメディアコンテナ（アダプタの mediaContainers）。
+     *
+     * 拡大表示では、表示中の 1 件を包む要素だけを返します。拡大表示は 1 件ずつ切り替えて見せるので、
+     * 画面にある要素の並びが、投稿の中の番号と一致するとは限らないためです。
+     * 個別ボタンは付けず、メインボタン（全件の保存）といいね連動保存だけを動かします。
+     * 総数は mediaCount で別に伝えます。
      *
      * @param {Element} root
      * @returns {Element[]}
      */
     const mediaContainers = (root) => {
+        if (isViewer(root)) {
+            // ほかのダイアログ（投稿の作成など）は、最初の querySelector で見送られます。
+            // プロフィール画像の拡大表示（"/ユーザー名/photo"）は、投稿の URL ではないので対象外です。
+            const media = root.querySelector(VIEWER_MEDIA);
+            if (media === null || !viewerMatch(root)) return [];
+            return media.closest("article") === null ? [media] : viewerContainers(root).slice(0, 1);
+        }
         // この投稿自身のメディアだけを残します（引用とリンクカードの中のものは除く）。
         // 親をたどるのは 1 件につき 1 回だけです。最初に当たった境目がこの投稿のコンテナなら、
         // 途中に引用の枠もリンクカードも無かった、と分かります。
@@ -186,7 +300,36 @@
      * @param {Element} root
      * @returns {object|null}
      */
-    const readPost = (root) => {
+    const readPost = (root) => (isViewer(root) ? readViewer(root) : readArticle(root));
+
+    /**
+     * 拡大表示している投稿の情報を読む。
+     * 拡大表示には表示名や本文が無いので、同じ投稿の <article>（右側の会話欄か、後ろのタイムライン）から読みます。
+     * どこにも無いとき（右側の会話欄を閉じていて、後ろの画面にも出ていないなど）は、URL から分かることだけで作ります。
+     *
+     * @param {Element} root - 拡大表示
+     * @returns {object|null}
+     */
+    const readViewer = (root) => {
+        const match = viewerMatch(root);
+        if (!match) return null;
+
+        const id = match[2];
+        for (const article of articlesOf(id)) {
+            const post = readArticle(article);
+            if (post?.postId === id) return post;
+        }
+
+        return { site: "x", screenName: match[1], postId: id, name: "", text: "", time: timeOf(id) };
+    };
+
+    /**
+     * タイムラインの投稿（<article>）の情報を読む。
+     *
+     * @param {Element} root
+     * @returns {object|null}
+     */
+    const readArticle = (root) => {
         const match = matchStatus(root);
         if (!match) return null;
 
@@ -209,15 +352,47 @@
      * DOM からメディア URL を拾う（interceptor.js が通信を取り逃した場合の代わり）。
      * mediaContainers と同じ並びで返し、分からないものは null にします。
      *
-     * @param {Element} root
+     * @param {Element} root - タイムラインの投稿（<article>）
      * @returns {(object|null)[]}
      */
-    const scrapeDom = (root) => mediaContainers(root).map((container) => {
+    const scrapeDom = (root) => mediaContainers(root).map(scrapeOne);
+
+    /**
+     * 拡大表示している投稿のメディア URL を、DOM から拾う（interceptor.js が通信を取り逃した場合の代わり）。
+     *
+     * 同じ投稿が後ろのタイムラインにも出ていれば、そちらには全件が正しい並びで揃っているので、そちらを使います。
+     * 無ければ拡大表示の中から拾います。1 件しか出ていなければ、URL の番号（"/photo/2" の 2）の位置に置きます
+     * （手前の番号は分からないので null。保存されるのは分かった分だけです）。
+     *
+     * @param {Element} root - 拡大表示
+     * @param {string} id - 投稿 ID
+     * @returns {(object|null)[]}
+     */
+    const scrapeViewer = (root, id) => {
+        for (const article of articlesOf(id)) {
+            const list = scrapeDom(article);
+            if (list.some(Boolean)) return list;
+        }
+
+        const list = viewerContainers(root).map(scrapeOne);
+        const n = Number(VIEWER_PATH.exec(location.pathname)?.[3] ?? 1);
+        if (list.length !== 1 || !(n > 1 && n <= 32)) return list;
+        return Array.from({ length: n }, (_, i) => (i === n - 1 ? list[0] : null));
+    };
+
+    /**
+     * メディア 1 件の URL を、それを包む要素から拾う。
+     *
+     * @param {Element} container
+     * @returns {object|null}
+     */
+    const scrapeOne = (container) => {
         const video = container.querySelector("video");
         const poster = video?.poster ?? "";
 
         // 動画: サムネイル URL の中のメディア ID でキャッシュを引きます。
-        const cached = cache.get(`v${VIDEO_ID.exec(poster)?.[1]}`)?.[0];
+        const videoId = VIDEO_ID.exec(poster)?.[1];
+        const cached = videoId ? cache.get(`v${videoId}`)?.[0] : null;
         if (cached) return cached;
 
         // GIF はサムネイル名から実体の URL を組み立てられます。
@@ -238,16 +413,53 @@
         const ext = (m[2] ?? /[?&]format=(\w+)/.exec(src)?.[1] ?? "jpg").toLowerCase();
         const photo = { kind: "photo", url: `${m[1]}?format=${ext}&name=orig`, ext };
         return isValidMedia(photo) ? photo : null;
-    });
+    };
+
+    /**
+     * 投稿 ID だけを素早く読む（アダプタの postId）。
+     *
+     * @param {Element} root
+     * @returns {string|null}
+     */
+    const postId = (root) => (isViewer(root) ? viewerMatch(root) : matchStatus(root))?.[2] ?? null;
 
     SMDCore.start({
         site: "x",
-        postRoot: "article", // タイムラインの投稿 1 件が <article> です
+        postRoot: POST_ROOT, // タイムラインの投稿 1 件が <article> です。画像の拡大表示も 1 件として扱います
         mediaContainers,
         readPost,
 
         /** 投稿 ID だけを素早く読む（ボタンの描き分けのたびに呼ばれる） */
-        postId: (root) => matchStatus(root)?.[2] ?? null,
+        postId,
+
+        /**
+         * 拡大表示では表示中の 1 件しか数えられないので、通信から拾った件数を総数として伝えます。
+         * これで、枚数バッジと「全件保存済みか」の判断が、タイムラインと同じになります。
+         *
+         * @param {Element} root
+         * @returns {number}
+         */
+        mediaCount: (root) => (isViewer(root) ? cache.get(postId(root))?.length ?? 0 : 0),
+
+        /**
+         * 押された「いいね」が、どの投稿のものか。
+         * 拡大表示の右側の会話欄に出ている、拡大表示中の投稿そのもののいいねは、拡大表示のものとして扱います。
+         * 会話欄の投稿にはメディアが表示されないため、そのままでは「メディアの無い投稿」として見送られてしまうからです。
+         * いいねが押されたときにしか呼ばれません。
+         *
+         * @param {Element} like
+         * @returns {Element|null}
+         */
+        likeRoot: (like) => {
+            const root = like.closest(POST_ROOT);
+            if (root === null || isViewer(root)) return root;
+
+            const viewer = root.closest(VIEWER);
+            if (viewer === null || mediaContainers(root).length > 0) return root;
+
+            const id = postId(viewer);
+            return id !== null && STATUS_PATH.exec(statusLink(root)?.pathname ?? "")?.[2] === id ? viewer : root;
+        },
 
         /**
          * メディア一覧。通信から拾った情報を優先し、足りない番号は DOM から補います。
@@ -258,7 +470,7 @@
          */
         getMedia: async (root, post) => {
             const cached = cache.get(post.postId) ?? [];
-            const dom = scrapeDom(root);
+            const dom = isViewer(root) ? scrapeViewer(root, post.postId) : scrapeDom(root);
             return Array.from({ length: Math.max(cached.length, dom.length) }, (_, i) => cached[i] ?? dom[i] ?? null);
         },
 
@@ -266,7 +478,15 @@
          * 返信・リポスト・いいねが並ぶ操作バー（引用部分のものは除く）。
          * :has() で操作バーそのものを探すより、中のボタンから親をたどるほうが軽く済みます。
          */
-        actionBar: (root) => firstOwn(ACTIONS, root)?.closest('div[role="group"]') ?? null,
+        actionBar: (root) => {
+            if (!isViewer(root)) return firstOwn(ACTIONS, root)?.closest('div[role="group"]') ?? null;
+
+            // 拡大表示の操作バーは、画像の下にあります（右側の会話欄の投稿のものは除く）。
+            for (const el of root.querySelectorAll(ACTIONS)) {
+                if (el.closest("article") === null) return el.closest('div[role="group"]');
+            }
+            return null;
+        },
 
         /** "like" は未いいね、"unlike" はいいね済みのボタン。前者だけを見るので、付けたときだけ保存します */
         likeButton: '[data-testid="like"]',
@@ -275,7 +495,8 @@
          * ボタンに関係する要素（メディア・投稿へのリンク・操作バーのボタン）。
          * 投稿の中でこれらが増減したときだけ、ボタンを見直します。
          * 動画の再生時間の表示のような変化では見直さないので、再生中も軽く済みます。
+         * 拡大表示の画像を包む要素は、拡大表示が開いた後から入ってくることがあるので、これも見ます。
          */
-        watch: `${MEDIA}, a[href*="/status/"], ${ACTIONS}`,
+        watch: `${MEDIA}, ${VIEWER_MEDIA}, a[href*="/status/"], ${ACTIONS}`,
     });
 })();

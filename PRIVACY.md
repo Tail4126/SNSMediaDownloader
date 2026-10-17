@@ -1,6 +1,6 @@
 # Privacy Policy / プライバシーポリシー
 
-**Last updated / 最終更新:** 2026-10-10
+**Last updated / 最終更新:** 2026-10-17
 
 > **Note on Language / 言語に関する注記**
 > このポリシーは英語で書いたものが正式版で、日本語訳は参考用です。両者の内容にズレがあった場合は英語版を優先します。
@@ -14,13 +14,13 @@
 | :--- | :--- |
 | Does it collect personal data? / 個人情報を収集しますか？ | **No / いいえ** |
 | Is there a developer-owned server? / 開発者のサーバーはありますか？ | **No — none exists / ありません** |
-| Does it make network requests? / 外部と通信しますか？ | Yes, but only when a save is triggered — by the download button, or by a like if you enabled that — and only to Bluesky's public API and the author's PDS, or, on Poipiku, to `poipiku.com` itself (§3) / はい。ただし保存が始まったときだけ（ダウンロードボタン、または有効にした場合はいいね）、Bluesky の公開 API と投稿者の PDS、ポイピクでは `poipiku.com` 自身に対してのみ（§3） |
+| Does it make network requests? / 外部と通信しますか？ | Yes, but only when a save is triggered — by the download button, or by a like if you enabled that — and only to Bluesky's public API and the author's PDS, on Poipiku to `poipiku.com` itself, or on Niconico Seiga to `seiga.nicovideo.jp` and `lohas.nicoseiga.jp` (§3) / はい。ただし保存が始まったときだけ（ダウンロードボタン、または有効にした場合はいいね）、Bluesky の公開 API と投稿者の PDS、ポイピクでは `poipiku.com` 自身、ニコニコ静画では `seiga.nicovideo.jp` と `lohas.nicoseiga.jp` に対してのみ（§3） |
 | Does it use analytics or telemetry? / 解析・テレメトリはありますか？ | **No / ありません** |
 | Does it record what you view? / 閲覧の履歴を記録しますか？ | **No / いいえ** |
 | Does it record what you save? / 保存したものを記録しますか？ | Only which media items were saved (post ID and item number), plus the files still waiting while a save is running — on this device, until the browser closes, never synced or sent (§1.2) / どのメディアを保存したか（投稿 ID と何枚目か）と、保存中は保存待ちのファイルの一覧だけを、端末内に、ブラウザを閉じるまで。同期も送信もしません（§1.2） |
 | Where are settings stored? / 設定の保存先は？ | `storage.sync` — your browser profile / ブラウザのプロファイル内 |
 | Are settings synced across devices? / 端末間で同期されますか？ | **Yes**, via your browser account / **されます**（ブラウザのアカウント経由） |
-| Does it read the pages you visit? / 見ているページを読み取りますか？ | Only x.com / twitter.com / bsky.app / poipiku.com / privatter.net / privatter.me, and only the parts described in §2 / x.com・twitter.com・bsky.app・poipiku.com・privatter.net・privatter.me のみ、かつ §2 に書いた範囲だけ |
+| Does it read the pages you visit? / 見ているページを読み取りますか？ | Only x.com / twitter.com / bsky.app / poipiku.com / privatter.net / privatter.me / skeb.jp / seiga.nicovideo.jp / manga.nicovideo.jp, and only the parts described in §2 / x.com・twitter.com・bsky.app・poipiku.com・privatter.net・privatter.me・skeb.jp・seiga.nicovideo.jp・manga.nicovideo.jp のみ、かつ §2 に書いた範囲だけ |
 | Does it load remote code? / 外部コードを読み込みますか？ | **No / いいえ** |
 | Can I delete everything? / 完全に削除できますか？ | Yes — uninstalling removes all data / はい。アンインストールで全て消えます |
 
@@ -69,7 +69,7 @@ like from saving the same files again, the Extension keeps one small record:
 
 | Item | Example | Why |
 | :--- | :--- | :--- |
-| Site and post ID | `x:1234567890123456789` (or `bluesky:…`, `poipiku:<postId>`, `privatter:i<postId>`, `privatterplus:<postId>`) | To recognise the post wherever it appears |
+| Site and post ID | `x:1234567890123456789` (or `bluesky:…`, `poipiku:<postId>`, `privatter:i<postId>`, `privatterplus:<postId>`, `skeb:<creator>/<work number>`, `niconico:im<number>` / `niconico:mg<number>`) | To recognise the post wherever it appears |
 | How many media items the post has | `4` | To tell "all saved" from "some saved" |
 | Which of those items were saved | `0, 2` (the 1st and 3rd) | To mark each item's button |
 
@@ -84,7 +84,9 @@ It lives in `chrome.storage.session` / `browser.storage.session`, which is:
   or uninstalled.
 * **Kept apart for private windows.** If you allow the Extension in private / incognito windows,
   saves made there go into a separate record that normal windows can't see, and that record is
-  cleared as soon as the last private window closes.
+  cleared as soon as the last private window closes. In Firefox, the files saved from a private
+  window are also started as private downloads, so they show up only in the private session's
+  download list, not in your normal download history.
 * Capped at 3000 posts, oldest dropped first.
 
 There's no button to clear it earlier; closing the browser is how you clear it.
@@ -94,7 +96,7 @@ be saved, and the counter shown in the corner of the page. Browsers stop an idle
 at any time, and keeping these here is what lets a save carry on from where it was. For each waiting
 file, the list holds:
 
-* its download URL (an X media URL, a Bluesky `getBlob` URL, a signed `cdn.poipiku.com` image URL, a Privatter `img_original` image URL, or a Privatter+ `media.privatter.me` original-image URL);
+* its download URL (an X media URL, a Bluesky `getBlob` URL, a signed `cdn.poipiku.com` image URL, a Privatter `img_original` image URL, a Privatter+ `media.privatter.me` original-image URL, a signed Skeb `si.imgix.net` image URL or `fcdn.skeb.jp` video / audio URL, a signed Niconico Seiga `lohas.nicoseiga.jp` full-size image URL, or a signed Niconico Manga `deliver.cdn.nicomanga.jp` page image URL);
 * the file name built from your template — which includes the author's name, the post ID or the
   post's text only if your template uses them;
 * the post ID and item number, and the save options (what to do on a name clash, whether to show
@@ -149,7 +151,7 @@ Three permissions:
 Two browser APIs that need no permission are also used, both only to keep open tabs in step:
 
 * **`tabs`** — to send the counter and saved-media updates to open x.com / twitter.com / bsky.app /
-  poipiku.com / privatter.net / privatter.me tabs. Tabs are selected by those URL patterns; the Extension reads only each tab's numeric id and
+  poipiku.com / privatter.net / privatter.me / skeb.jp / seiga.nicovideo.jp / manga.nicovideo.jp tabs. Tabs are selected by those URL patterns; the Extension reads only each tab's numeric id and
   whether it's a private tab — never its URL, title, or contents.
 * **`windows`** — to notice when the last private window has closed, so the private-window record
   can be cleared.
@@ -159,6 +161,7 @@ Content scripts run on these sites, and nowhere else:
 ```
 https://x.com/*        https://twitter.com/*        https://bsky.app/*        https://poipiku.com/*
 https://privatter.net/i/*        https://privatter.net/p/*        https://privatter.me/page/*
+https://skeb.jp/*        https://seiga.nicovideo.jp/seiga/im*        https://manga.nicovideo.jp/watch/mg*
 ```
 
 On those pages the Extension looks at the post structure — the media elements, the action bar, the
@@ -171,9 +174,17 @@ and only when you save that post: its value goes into the same request the page 
 On Privatter it runs only on image posts (`/i/…`) and text posts (`/p/…`); it reads the image links,
 author, caption or title and timestamp already on the page, never enters a password or signs in for
 you, and reads no form input at all. Privatter+ is handled the same way, on its post pages (`/page/…`) only.
+Skeb switches pages without reloading, so the script is loaded on every skeb.jp page, but it acts only
+while a work's page (`/@{creator}/works/{number}`) is shown: it reads the media URLs, the creator's
+name, the request text and the share links already on the page, and reads no form input at all.
+Skeb has no like button, so save-on-like (below) doesn't apply there. It
+never removes Skeb's "SAMPLE" watermark or fetches anything the page doesn't show. On Niconico it runs
+only on illustration pages (`/seiga/im…`) and manga episode pages (`/watch/mg…`); it reads the image
+links, the poster's or author's ID and name, the title and the post date already on the page, and reads
+no form input at all.
 
 When **Also download when you like a post** is switched on, the Extension additionally listens for
-clicks on the site's like button (on Poipiku, the emoji reaction buttons; on Privatter, the reaction icons under ♡いいね; on Privatter+, the icons in the reaction picker) so it knows when to start a save. It only observes: it never
+clicks on the site's like button (on Poipiku, the emoji reaction buttons; on Privatter, the reaction icons under ♡いいね; on Privatter+, the icons in the reaction picker; on Niconico Seiga, the button that adds an illustration to a clip folder) so it knows when to start a save. It only observes: it never
 clicks, cancels, or alters a like, and it cannot see likes you made on another device or before it
 was installed. With the setting off — which is how it ships — the listener does nothing at all.
 
@@ -190,7 +201,7 @@ except as a `postMessage` to this Extension's own content script, sent with `loc
 the target so no other origin can receive it. Nothing is written to disk.
 
 `host_permissions` covers `x.com`, `twitter.com`, `bsky.app`, `public.api.bsky.app`,
-`plc.directory`, `poipiku.com`, `cdn.poipiku.com`, `privatter.net` and `privatter.me` — and nothing else. That narrowness is why a Bluesky account self-hosting under a
+`plc.directory`, `poipiku.com`, `cdn.poipiku.com`, `privatter.net`, `privatter.me`, `skeb.jp`, `seiga.nicovideo.jp`, `manga.nicovideo.jp` and `lohas.nicoseiga.jp` — and nothing else. That narrowness is why a Bluesky account self-hosting under a
 `did:web` identity can't be resolved: fetching its DID document would require read access to
 arbitrary domains, and that trade isn't worth making by default.
 
@@ -198,10 +209,11 @@ arbitrary domains, and that trade isn't worth making by default.
 
 ### 3. Network requests
 
-The Extension itself makes requests to exactly four kinds of host — three of them Bluesky
-infrastructure, plus Poipiku itself — and all of them **only after a save has been triggered** — by
-pressing a download button, or by liking a post (sending an emoji reaction, on Poipiku; sending a
-reaction icon, on Privatter and Privatter+) if you switched that on:
+The Extension itself makes requests to exactly five kinds of host — three of them Bluesky
+infrastructure, plus Poipiku itself and Niconico Seiga's full-size image link — and all of them **only
+after a save has been triggered** — by pressing a download button, or by liking a post (sending an emoji
+reaction, on Poipiku; sending a reaction icon, on Privatter and Privatter+; adding to a clip folder, on
+Niconico Seiga) if you switched that on:
 
 | Host | When | What is sent | Why |
 | :--- | :--- | :--- | :--- |
@@ -209,6 +221,7 @@ reaction icon, on Privatter and Privatter+) if you switched that on:
 | `plc.directory` | First save for a given account | The author's DID | To find which server that account's files live on |
 | The author's PDS (usually `bsky.social`) | Saving a Bluesky file | The author's DID and the file's CID | To fetch the file itself |
 | `poipiku.com` (`/f/ShowIllustDetailF.jsp`) | Saving a Poipiku post, on that post's own page or in the こそフォロ / フォロータグ lists — one POST per save | The author's user ID and the post ID — and, for a password-protected post, whatever is in that post's password box (normally the password you typed to open it; empty for every other post), exactly as the page sends it | To get the signed full-size image URLs |
+| `seiga.nicovideo.jp` (`/image/source/{number}`), redirecting to `lohas.nicoseiga.jp` (`/o/…`), then `lohas.nicoseiga.jp` (`/priv/…`, `HEAD` only) | Saving a Niconico Seiga illustration — one GET and one HEAD per save | The illustration number, exactly as the page's 原寸大で見る (view full size) link sends it | To get the signed full-size image URL, and its file type |
 
 The three Bluesky endpoints are public and unauthenticated. No credentials, no cookies of yours, no
 identifier of any kind, and nothing about you is attached — the requests say only "which post is
@@ -222,13 +235,24 @@ Poipiku hand out full-size URLs for posts you're signed in to see. The Extension
 or send those cookies anywhere else; it never sees them. The reply is used only to pick out the
 image URLs, and nothing from it is kept after the save.
 
+The Niconico Seiga request is the same kind of thing. It opens the illustration's own 原寸大で見る link,
+the one you'd click on the page, from the Extension's background; your browser attaches your Niconico
+cookies (your session) to it, exactly as when you click the link — that's what lets Niconico redirect
+to the full-size image. The Extension doesn't read, store, or send those cookies anywhere else. The
+reply is used only to pick out the full-size image URL, a `HEAD` request to that URL asks only for its
+file type, and nothing from either is kept after the save.
+
 The download of the file itself is performed by your browser's download manager against the media
 host (`pbs.twimg.com`, `video.twimg.com`, the PDS, `cdn.poipiku.com`, Privatter's image host
-`d2pqhom6oey9wx.cloudfront.net`, or Privatter+'s `media.privatter.me`), exactly as if you had opened that URL.
+`d2pqhom6oey9wx.cloudfront.net`, Privatter+'s `media.privatter.me`, Skeb's `si.imgix.net` and
+`fcdn.skeb.jp`, Niconico Seiga's `lohas.nicoseiga.jp`, or Niconico Manga's `deliver.cdn.nicomanga.jp`), exactly as if you had opened that URL.
 
 **On X the Extension makes no requests of its own at all.** It only reads responses the page had
 already received for its own reasons. **The same goes for Privatter and Privatter+:** the full-size image links are
-already on the post page, so apart from the download itself, nothing is sent anywhere.
+already on the post page, so apart from the download itself, nothing is sent anywhere. **And for Skeb:**
+the signed media URLs are already on the work's page; the work API, which needs the page's own
+credentials, is never called. **And for Niconico Manga:** the signed page image URLs are already on the
+episode page.
 
 Beyond that:
 
@@ -245,7 +269,7 @@ Beyond that:
 There's nothing to share, sell, or hand over, because nothing is collected in the first place —
 including in a business transfer scenario.
 
-The Extension isn't acting as a data processor for X, Bluesky, Poipiku, Privatter or Privatter+. Using those services is still
+The Extension isn't acting as a data processor for X, Bluesky, Poipiku, Privatter, Privatter+, Skeb or Niconico. Using those services is still
 governed by their own privacy policies, as is your browser vendor's handling of synced settings
 (§1.1).
 
@@ -339,7 +363,7 @@ Bluesky では、まともなファイル名を作るためのメタ情報を、
 
 | 内容 | 例 | 理由 |
 | :--- | :--- | :--- |
-| サイトと投稿 ID | `x:1234567890123456789`（または `bluesky:…`、`poipiku:<投稿 ID>`、`privatter:i<投稿 ID>`、`privatterplus:<記事 ID>`） | どこに表示されても同じ投稿だと分かるようにするため |
+| サイトと投稿 ID | `x:1234567890123456789`（または `bluesky:…`、`poipiku:<投稿 ID>`、`privatter:i<投稿 ID>`、`privatterplus:<記事 ID>`、`skeb:<クリエイター>/<作品番号>`、`niconico:im<番号>` / `niconico:mg<番号>`） | どこに表示されても同じ投稿だと分かるようにするため |
 | 投稿内のメディア数 | `4` | 「全件保存済み」と「一部だけ保存済み」を区別するため |
 | そのうち保存済みのもの | `0, 2`（1 枚目と 3 枚目） | メディアごとのボタンに印を付けるため |
 
@@ -353,7 +377,9 @@ Bluesky では、まともなファイル名を作るためのメタ情報を、
 * **ブラウザを閉じると消えます。** 拡張機能の更新・再読み込み・アンインストールでも消えます。
 * **シークレットウィンドウの分は別に持ちます。** シークレット（プライベート）ウィンドウでの
   実行を許可している場合、そこでの保存は通常ウィンドウからは見えない別の記録に入り、
-  最後のシークレットウィンドウを閉じた時点で消えます。
+  最後のシークレットウィンドウを閉じた時点で消えます。Firefox では、プライベートウィンドウから保存した
+  ファイルのダウンロードもプライベートのものとして始めるので、通常のダウンロード履歴には残らず、
+  そのプライベートセッションのダウンロード一覧にだけ出ます。
 * 上限は 3000 投稿で、古いものから捨てます。
 
 これより早く消すボタンはありません。消したいときはブラウザを閉じてください。
@@ -363,7 +389,7 @@ Bluesky では、まともなファイル名を作るためのメタ情報を、
 ここに置いておくことで、止められても保存を続きから再開できるようにしています。
 保存待ちの 1 件ごとに持つのは次の情報です。
 
-* ダウンロード元の URL（X のメディア URL、Bluesky の `getBlob` の URL、ポイピクの `cdn.poipiku.com` の署名付き画像 URL、Privatter の `img_original` の画像 URL、または Privatter+ の `media.privatter.me` の原寸画像 URL）
+* ダウンロード元の URL（X のメディア URL、Bluesky の `getBlob` の URL、ポイピクの `cdn.poipiku.com` の署名付き画像 URL、Privatter の `img_original` の画像 URL、Privatter+ の `media.privatter.me` の原寸画像 URL、Skeb の `si.imgix.net` の署名付き画像 URL か `fcdn.skeb.jp` の署名付き動画・音声 URL、ニコニコ静画の `lohas.nicoseiga.jp` の署名付き原寸画像 URL、またはニコニコ漫画の `deliver.cdn.nicomanga.jp` の署名付きページ画像 URL）
 * テンプレートから組み立てた保存先のファイル名（テンプレートで使っている場合に限り、
   投稿者の名前・投稿 ID・本文を含みます）
 * 投稿 ID と何枚目か、保存時の設定（同名時の動作、保存ダイアログを出すか）
@@ -418,7 +444,7 @@ X 側のキャッシュは上限 2000 件で古い順に破棄され、ページ
 このほか、権限を必要としないブラウザ API を 2 つ使います。どちらも開いているタブの表示を
 そろえるためだけのものです。
 
-* **`tabs`** — カウンターと保存済みの更新を、開いている x.com / twitter.com / bsky.app / poipiku.com / privatter.net / privatter.me のタブへ
+* **`tabs`** — カウンターと保存済みの更新を、開いている x.com / twitter.com / bsky.app / poipiku.com / privatter.net / privatter.me / skeb.jp / seiga.nicovideo.jp / manga.nicovideo.jp のタブへ
   送るため。タブはこれらの URL パターンで選び、読み取るのは各タブの番号とシークレットかどうかだけです。
   URL・タイトル・内容は読みません。
 * **`windows`** — 最後のシークレットウィンドウが閉じたことを知り、シークレット側の記録を消すため。
@@ -428,6 +454,7 @@ X 側のキャッシュは上限 2000 件で古い順に破棄され、ページ
 ```
 https://x.com/*        https://twitter.com/*        https://bsky.app/*        https://poipiku.com/*
 https://privatter.net/i/*        https://privatter.net/p/*        https://privatter.me/page/*
+https://skeb.jp/*        https://seiga.nicovideo.jp/seiga/im*        https://manga.nicovideo.jp/watch/mg*
 ```
 
 これらのページで本拡張機能が見るのは、投稿の構造（メディア要素、操作バー、投稿者リンク、
@@ -439,9 +466,16 @@ https://privatter.net/i/*        https://privatter.net/p/*        https://privat
 ページ自身が送るのと同じリクエストに、その値を入れて送ります（§3）。
 Privatter では画像の投稿（`/i/…`）と文章の投稿（`/p/…`）だけで動き、ページにある画像へのリンク・投稿者・
 添えられた文章かタイトル・投稿日時を読むだけです。パスワードを入力したり、代わりにログインしたりはせず、フォーム入力は一切読みません。Privatter+ も同じ扱いで、記事のページ（`/page/…`）だけで動きます。
+Skeb はページを読み込み直さずに画面を切り替えるため、スクリプトは skeb.jp のどのページでも読み込まれますが、
+動くのは作品のページ（`/@{クリエイター}/works/{番号}`）を表示している間だけです。ページにあるメディアの URL・
+クリエイターの名前・依頼文・共有ボタンのリンクを読むだけで、フォーム入力は一切読みません。
+Skeb には「いいね」にあたるボタンが無いので、下のいいね連動保存は Skeb では働きません。
+「SAMPLE」の透かしを外したり、ページに表示されていないものを取得したりはしません。
+ニコニコではイラストのページ（`/seiga/im…`）と漫画のエピソードのページ（`/watch/mg…`）だけで動き、ページにある
+画像へのリンク・投稿者や作者の ID と名前・タイトル・投稿日時を読むだけで、フォーム入力は一切読みません。
 
 **「いいねしたときも同時にダウンロードする」をオンにした場合**は、保存を始めるきっかけを
-知るために、サイトのいいねボタン（ポイピクでは絵文字リアクションのボタン、Privatter では「♡いいね」で開くアイコン、Privatter+ ではリアクションを選ぶ一覧のアイコン）へのクリックも見ます。見るだけです。いいねを代わりに押したり、
+知るために、サイトのいいねボタン（ポイピクでは絵文字リアクションのボタン、Privatter では「♡いいね」で開くアイコン、Privatter+ ではリアクションを選ぶ一覧のアイコン、ニコニコ静画ではイラストをクリップ先に追加するボタン）へのクリックも見ます。見るだけです。いいねを代わりに押したり、
 取り消したり、書き換えたりはしません。他の端末で押したいいねや、導入前のいいねも分かりません。
 設定がオフの間（出荷時の状態）は、この待ち受けは何もしません。
 
@@ -460,7 +494,7 @@ Privatter では画像の投稿（`/i/…`）と文章の投稿（`/p/…`）だ
 ディスクには何も書きません。
 
 `host_permissions` は `x.com` / `twitter.com` / `bsky.app` / `public.api.bsky.app` /
-`plc.directory` / `poipiku.com` / `cdn.poipiku.com` / `privatter.net` / `privatter.me` のみで、それ以外はありません。`did:web` で自前運用している Bluesky アカウントを
+`plc.directory` / `poipiku.com` / `cdn.poipiku.com` / `privatter.net` / `privatter.me` / `skeb.jp` / `seiga.nicovideo.jp` / `manga.nicovideo.jp` / `lohas.nicoseiga.jp` のみで、それ以外はありません。`did:web` で自前運用している Bluesky アカウントを
 解決できないのはこの狭さが理由です。DID ドキュメントの取得には任意ドメインへの読み取り権限が必要で、
 既定でその取引をする価値は無いと判断しました。
 
@@ -468,9 +502,9 @@ Privatter では画像の投稿（`/i/…`）と文章の投稿（`/p/…`）だ
 
 ### 3. 外部通信
 
-本拡張機能自身が接続するのは、次の 4 種類のホストだけです。うち 3 つは Bluesky の基盤、
-残る 1 つはポイピク自身で、いずれも**保存が始まった後にのみ**発生します（ダウンロードボタンを押したとき、
-または有効にしている場合はいいねを押したとき。ポイピクでは絵文字リアクションを、Privatter と Privatter+ ではいいね・リアクションのアイコンを送ったとき）。
+本拡張機能自身が接続するのは、次の 5 種類のホストだけです。うち 3 つは Bluesky の基盤、
+残る 2 つはポイピク自身とニコニコ静画の原寸画像のリンクで、いずれも**保存が始まった後にのみ**発生します（ダウンロードボタンを押したとき、
+または有効にしている場合はいいねを押したとき。ポイピクでは絵文字リアクションを、Privatter と Privatter+ ではいいね・リアクションのアイコンを送ったとき、ニコニコ静画ではクリップ先に追加したとき）。
 
 | 接続先 | タイミング | 送る内容 | 理由 |
 | :--- | :--- | :--- | :--- |
@@ -478,6 +512,7 @@ Privatter では画像の投稿（`/i/…`）と文章の投稿（`/p/…`）だ
 | `plc.directory` | そのアカウントについて初回の保存時 | 投稿者の DID | そのアカウントのファイルがどのサーバーにあるかを調べるため |
 | 投稿者の PDS（多くは `bsky.social`） | Bluesky のファイルを保存するとき | 投稿者の DID とファイルの CID | ファイル本体を取得するため |
 | `poipiku.com`（`/f/ShowIllustDetailF.jsp`） | ポイピクの投稿を、その個別ページか、こそフォロ・フォロータグの一覧で保存するとき。保存 1 回につき POST 1 回 | 投稿者のユーザー ID と投稿 ID。パスワード付きの投稿では、その投稿のパスワード欄に入っている値（通常は開くときに自分で入力したパスワード。それ以外の投稿では空）も、ページと同じように送ります | 原寸画像の署名付き URL を受け取るため |
+| `seiga.nicovideo.jp`（`/image/source/{番号}`）から転送される `lohas.nicoseiga.jp`（`/o/…`）、続けて `lohas.nicoseiga.jp`（`/priv/…`。`HEAD` のみ） | ニコニコ静画のイラストを保存するとき。保存 1 回につき GET 1 回と HEAD 1 回 | イラスト番号。ページの「原寸大で見る」のリンクと同じです | 署名付きの原寸画像の URL と、その画像の種類を知るため |
 
 Bluesky の 3 つは公開・認証不要のエンドポイントです。認証情報も、あなたの Cookie も、
 いかなる識別子も、あなたに関する情報も一切付与しません。
@@ -492,14 +527,22 @@ Bluesky の 3 つは公開・認証不要のエンドポイントです。認証
 保存も、他の場所への送信もしません（そもそも中身を目にしません）。応答は画像の URL を拾うためだけに使い、
 保存が終われば何も残しません。
 
+ニコニコ静画へのリクエストも同じ性質のものです。イラストのページにある「原寸大で見る」のリンク（自分でクリックするのと
+同じもの）を、本拡張機能のバックグラウンドから開きます。リンクをクリックしたときと同じように、ブラウザがあなたの
+ニコニコの Cookie（ログイン中のセッション）を付けるので、ニコニコが原寸画像へ転送してくれます。本拡張機能はその Cookie を
+読み取らず、保存も、他の場所への送信もしません。応答は原寸画像の URL を拾うためだけに使い、その URL への `HEAD` では
+画像の種類だけを尋ねます。どちらも、保存が終われば何も残しません。
+
 ファイル本体のダウンロードは、ブラウザのダウンロードマネージャがメディアホスト
-（`pbs.twimg.com`、`video.twimg.com`、PDS、`cdn.poipiku.com`、Privatter の画像サーバー `d2pqhom6oey9wx.cloudfront.net`、または Privatter+ の `media.privatter.me`）に対して行います。
+（`pbs.twimg.com`、`video.twimg.com`、PDS、`cdn.poipiku.com`、Privatter の画像サーバー `d2pqhom6oey9wx.cloudfront.net`、Privatter+ の `media.privatter.me`、Skeb の `si.imgix.net` と `fcdn.skeb.jp`、ニコニコ静画の `lohas.nicoseiga.jp`、またはニコニコ漫画の `deliver.cdn.nicomanga.jp`）に対して行います。
 その URL を自分で開いたときとまったく同じ動作です。
 
 **X に対しては、本拡張機能からの通信は一切ありません。**
 ページが自身の都合で既に受け取ったレスポンスを読んでいるだけです。
 **Privatter と Privatter+ も同じです。** 原寸画像へのリンクは投稿のページに既に載っているので、
-保存そのもの以外に、どこへも何も送りません。
+保存そのもの以外に、どこへも何も送りません。**Skeb も同じです。** 署名付きのメディアの URL は作品のページに
+既に載っています。ページ自身の認証情報が要る作品の API は呼びません。**ニコニコ漫画も同じです。** 署名付きのページの画像の URL は
+エピソードのページに既に載っています。
 
 そのほか、
 
@@ -515,7 +558,7 @@ Bluesky の 3 つは公開・認証不要のエンドポイントです。認証
 
 そもそも何も収集していないので、渡せるものがありません。事業譲渡があった場合も同じです。
 
-また本拡張機能は X・Bluesky・ポイピク・Privatter・Privatter+ の処理者として動くものでもありません。
+また本拡張機能は X・Bluesky・ポイピク・Privatter・Privatter+・Skeb・ニコニコの処理者として動くものでもありません。
 これらのサービスの利用にはそれぞれのプライバシーポリシーが適用されます。
 同期される設定の扱いについては、お使いのブラウザベンダーのポリシーが適用されます（§1.1）。
 

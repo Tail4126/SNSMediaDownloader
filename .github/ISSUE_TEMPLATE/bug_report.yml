@@ -37,6 +37,8 @@ body:
         - Poipiku / ポイピク
         - Privatter
         - Privatter+
+        - Skeb
+        - Niconico Seiga / Manga / ニコニコ静画・漫画
         - More than one / 複数のサイト
         - Not site-specific — settings screen, etc. / サイトに依存しない（設定画面など）
     validations:
